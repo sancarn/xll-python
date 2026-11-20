@@ -4,6 +4,7 @@ import dataclasses
 import datetime
 import hashlib
 import importlib
+import importlib.machinery
 import importlib.util
 import inspect
 import io
@@ -114,8 +115,48 @@ def _register(fn, functions, entries):
     functions[name.upper()] = (fn, signature, hints)
 
 
-def _discover(folders, packages):
+class _FreshSource(importlib.machinery.SourceFileLoader):
+    def get_code(self, fullname):
+        return self.source_to_code(self.get_data(self.path), self.path)
+
+
+class _StartupImports:
+    """Read local helpers from source even for same-size edits within one timestamp tick."""
+    roots = ()
+
+    def owns(self, filename):
+        return isinstance(filename, str) and os.path.normcase(os.path.abspath(filename)).startswith(self.roots)
+
+    def find_spec(self, fullname, path=None, target=None):
+        if not self.roots:
+            return None
+        spec = importlib.machinery.PathFinder.find_spec(fullname, path)
+        if spec and isinstance(spec.loader, importlib.machinery.SourceFileLoader) and self.owns(spec.origin):
+            spec.loader = _FreshSource(fullname, spec.origin)
+        return spec
+
+    def modules(self):
+        return {name: module for name, module in sys.modules.copy().items()
+                if name not in (__name__, "xll_python", "__main__")
+                and self.owns(getattr(module, "__file__", None)) and str(module.__file__).endswith(".py")}
+
+
+_startup_imports = _StartupImports()
+sys.meta_path.insert(sys.meta_path.index(importlib.machinery.PathFinder), _startup_imports)
+
+
+def _discover(folders, packages, refresh=False):
     global _functions, _managed_paths
+    previous_roots = _startup_imports.roots
+    roots = tuple(os.path.join(os.path.normcase(os.path.abspath(folder)), "") for folder in folders)
+    previous_modules = {}
+    if refresh:
+        _startup_imports.roots = previous_roots + roots
+        previous_modules = _startup_imports.modules()
+        for name in previous_modules:
+            del sys.modules[name]
+        linecache.clearcache()
+    _startup_imports.roots = roots
     old_path = sys.path.copy()
     sys.path[:] = [path for path in sys.path if path not in _managed_paths]
     original = sys.path.copy()
@@ -152,11 +193,18 @@ def _discover(folders, packages):
                             errors.append(f"{path} ({fn.__name__})\n{traceback.format_exc()}")
                 except Exception:
                     errors.append(f"{path}\n{traceback.format_exc()}")
+        if refresh and errors:
+            raise ValueError("Refresh failed. Previous functions remain active.\n" + "\n".join(errors))
         _functions = functions
         _managed_paths = [path for path in sys.path if path not in original]
         return dict(functions=entries, errors=errors)
     except BaseException:
         sys.path[:] = old_path
+        if refresh:
+            for name in _startup_imports.modules():
+                sys.modules.pop(name, None)
+            sys.modules.update(previous_modules)
+        _startup_imports.roots = previous_roots
         raise
 
 
@@ -203,8 +251,8 @@ def _encode(value):
     return value
 
 
-def _invoke(name, args):
-    fn, signature, hints = _functions[name.upper()]
+def _invoke(registration, args):
+    fn, signature, hints = registration
     values = []
     for par, value in zip(signature.parameters.values(), args):
         if isinstance(value, dict) and value.get("missing") is True:
@@ -301,9 +349,14 @@ def _preview(value):
 
 
 def _execute(operation, request):
+    registration = None
+    if operation == "call":
+        registration = _functions.get(request["name"].upper())
+        if registration is None:
+            return _encode(ExcelError(29))  # Excel can still call a deleted function from an existing formula.
     with _debug_lock:
         debug = _debug
-        path = request["path"] if operation == "script" else _functions[request["name"].upper()][0].__code__.co_filename
+        path = request["path"] if operation == "script" else registration[0].__code__.co_filename
         if debug and debug.path == os.path.normcase(os.path.abspath(path)) and debug.state["status"] == "armed":
             debug.state = dict(status="running")
         else:
@@ -312,7 +365,7 @@ def _execute(operation, request):
     try:
         if debug:
             sys.settrace(debug.trace)
-        return _script(path) if operation == "script" else _invoke(request["name"], request["args"])
+        return _script(path) if operation == "script" else _invoke(registration, request["args"])
     finally:
         if debug:
             sys.settrace(previous)
@@ -326,7 +379,7 @@ def dispatch(message):
         req = json.loads(message)
         op = req["op"]
         if op == "discover":
-            value = _discover(req["folders"], req["packages"])
+            value = _discover(req["folders"], req["packages"], req.get("refresh", False))
         elif op in ("call", "script"):
             value = _execute(op, req)
         elif op == "arm":

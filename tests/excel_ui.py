@@ -57,9 +57,9 @@ def verify(app, pid, base, home):
     def read_console(w):
         edits=[e for e in w.descendants(control_type="Edit") if e.element_info.class_name.startswith("WindowsForms10.EDIT")]
         return max((e.get_value() for e in edits),key=len,default="")
-    for label in ("Run Script","Package Installer","Startup Folders","Open IDE"):
+    for label in ("Run Script","Package Installer","Startup Folders","Open IDE","Check for Updates"):
         button(label)
-    print("PASS: Python ribbon tab and four actionable buttons",flush=True)
+    print("PASS: Python ribbon tab and five actionable buttons",flush=True)
 
     click_ribbon("Startup Folders")
     folders=window("Python startup folders")
@@ -67,6 +67,35 @@ def verify(app, pid, base, home):
     assert str(base/"packages") in [v.window_text() for v in folders.descendants(control_type="ListItem")]
     folders.child_window(title="Save",control_type="Button").invoke()
     print("PASS: startup folder / package link settings round-trip",flush=True)
+
+    def refresh():
+        click_ribbon("Startup Folders")
+        window("Python startup folders").child_window(title="Refresh",control_type="Button").invoke()
+
+    sheet=app.ActiveSheet
+    helper=base/"scripts/_rates.py"
+    helper.write_text("RATE = 11\n")
+    script=base/"scripts/reload.py"
+    script.write_text("from xll_python import function\nfrom _rates import RATE\n"
+                      "@function(name='PY.RATE')\ndef rate(): return RATE + 1\n"
+                      "@function(name='PY.OLD')\ndef old(): return 7\n")
+    refresh()
+    wait_for(lambda:app.Evaluate("=PY.RATE()")==12)
+    sheet.Range("M1").Formula2="=PY.RATE()"
+    sheet.Range("M2").Formula2="=PY.OLD()"
+    assert sheet.Range("M2").Value2==7
+    # Same byte length and timestamp must still reload a previously imported helper.
+    stamp=helper.stat()
+    helper.write_text("RATE = 22\n")
+    os.utime(helper,ns=(stamp.st_atime_ns,stamp.st_mtime_ns))
+    script.write_text("from xll_python import function\nfrom _rates import RATE\n"
+                      "@function(name='PY.RATE')\ndef rate(extra=3): return RATE + extra\n"
+                      "@function(name='PY.NEW')\ndef new(): return 8\n")
+    refresh()
+    wait_for(lambda:sheet.Range("M1").Value2==25)
+    assert app.Evaluate("=PY.RATE(5)")==27 and app.Evaluate("=PY.NEW()")==8
+    assert sheet.Range("M2").Text in ("#NAME?", "#VALUE!"), sheet.Range("M2").Text
+    print("PASS: live refresh reloaded source and imports, updated signatures, added and removed functions, and recalculated existing cells",flush=True)
 
     wheel=base/"xll_probe-1.0-py3-none-any.whl"
     info="xll_probe-1.0.dist-info/"

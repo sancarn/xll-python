@@ -36,6 +36,14 @@ namespace PythonExcel
         static extern IntPtr LoadLibraryEx(string path, IntPtr reserved, uint flags);
         [DllImport("kernel32", CharSet = CharSet.Unicode)]
         static extern IntPtr GetModuleHandle(string name);
+        [DllImport("kernel32", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern IntPtr FindResource(IntPtr module, string name, IntPtr type);
+        [DllImport("kernel32", SetLastError = true)]
+        static extern IntPtr LoadResource(IntPtr module, IntPtr resource);
+        [DllImport("kernel32", SetLastError = true)]
+        static extern int SizeofResource(IntPtr module, IntPtr resource);
+        [DllImport("kernel32")]
+        static extern IntPtr LockResource(IntPtr resource);
         [DllImport("kernel32", CharSet = CharSet.Unicode)]
         static extern uint GetModuleFileName(IntPtr handle, StringBuilder path, int size);
         [DllImport("kernel32", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
@@ -86,16 +94,31 @@ namespace PythonExcel
             finally { if (File.Exists(temp)) File.Delete(temp); }
         }
 
+        static Stream OpenArchive(string resource)
+        {
+            if (resource != "runtime")
+                return Assembly.GetExecutingAssembly().GetManifestResourceStream(resource + ".zip");
+            var module = GetModuleHandle(ExcelDna.Integration.ExcelDnaUtil.XllPath);
+            if (module == IntPtr.Zero) throw new Win32Exception();
+            var entry = FindResource(module, "PYTHON_RUNTIME", new IntPtr(10));
+            if (entry == IntPtr.Zero) throw new Win32Exception();
+            var data = LockResource(LoadResource(module, entry));
+            if (data == IntPtr.Zero) throw new InvalidDataException("Cannot read the embedded Python runtime.");
+            var bytes = new byte[SizeofResource(module, entry)];
+            Marshal.Copy(data, bytes, 0, bytes.Length);
+            return new MemoryStream(bytes, false);
+        }
+
         static string Unpack(string resource, string hash)
         {
-            var assembly = Assembly.GetExecutingAssembly();
             string dir = Path.Combine(Root, resource + "-" + hash.Substring(0, 16));
             if (Directory.Exists(dir)) return dir;
             string temp = dir + "." + Guid.NewGuid().ToString("N").Substring(0,8);
             Directory.CreateDirectory(temp);
             try
             {
-                using (var stream = assembly.GetManifestResourceStream(resource + ".zip"))
+                Log("Installing " + resource + " into " + dir);
+                using (var stream = OpenArchive(resource))
                 using (var digest = SHA256.Create())
                 {
                     string actual = BitConverter.ToString(digest.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
@@ -148,6 +171,7 @@ namespace PythonExcel
                     string ready = Path.Combine(Home, ".pip-ready");
                     if (!File.Exists(ready) || !File.Exists(Path.Combine(Home, "Lib", "site-packages", "pip", "__main__.py")))
                     {
+                        Log("Bootstrapping pip from the bundled wheel.");
                         using (var p = Process.Start(PipProcess("-I -X utf8 -m ensurepip --default-pip")))
                         {
                             var stderr = p.StandardError.ReadToEndAsync();

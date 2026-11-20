@@ -1,0 +1,134 @@
+﻿"""Interactive updater regression. Pass an XLL built with PYTHONEXCEL_RELEASE_TAG=v0.0.0."""
+import gc
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+
+sys.coinit_flags = 2
+import psutil
+import pythoncom
+import win32con
+import win32gui
+import win32process
+from pywinauto import Desktop
+from excel_smoke import ROOT, connect, wait_for
+
+
+def digest(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test(source):
+    url = "https://api.github.com/repos/sancarn/xll-python/releases/latest"
+    release = json.loads(subprocess.check_output(["curl.exe", "--fail", "--silent", "--show-error", url], timeout=30))
+    asset = next(a for a in release["assets"] if a["name"] == "PythonExcel.xll")
+    sha = asset["digest"].removeprefix("sha256:")
+    excel = Path(os.environ["ProgramFiles"]) / "Microsoft Office/root/Office16/EXCEL.EXE"
+    with tempfile.TemporaryDirectory(dir=ROOT/".build",prefix="restart-") as temp:
+        base = Path(temp)
+        target = base/"Python Excel.xll"
+        shutil.copyfile(source, target)
+        before = digest(target)
+        assert sha != before
+        csv = base/"startup.csv"
+        csv.write_text("test\n")
+        files = [base/"One workbook.xlsx",base/"Two \u03a9.xlsx"]
+        proc = subprocess.Popen([excel,"/x","/automation",csv],env=dict(os.environ,XLL_PYTHON_HOME=str(base/"profile")))
+        app = restored = None
+        def dialogs(pid):
+            windows=[]
+            def visit(h,_):
+                if (win32process.GetWindowThreadProcessId(h)[1]==pid and win32gui.IsWindowVisible(h)
+                        and win32gui.GetClassName(h)=="#32770"):
+                    windows.append(h)
+            win32gui.EnumWindows(visit,None)
+            return windows
+        def press(button_id):
+            def find():
+                for h in dialogs(proc.pid):
+                    if win32gui.GetWindowText(h)=="Python for Excel update":
+                        try: button=win32gui.GetDlgItem(h,button_id)
+                        except win32gui.error: button=None
+                        if button:
+                            win32gui.PostMessage(button,win32con.BM_CLICK,0,0)
+                            return True
+                        messages=[]
+                        win32gui.EnumChildWindows(h,lambda w,_:messages.append(win32gui.GetWindowText(w)),None)
+                        raise AssertionError(messages)
+            wait_for(find,40)
+        def replacement_pid():
+            for p in psutil.process_iter(["pid","name","cmdline"]):
+                if (p.info["name"] or "").lower()=="excel.exe" and str(files[0]) in (p.info["cmdline"] or []):
+                    return p.pid
+        try:
+            app=wait_for(lambda:connect(proc.pid,csv))
+            app.Visible=True
+            assert app.RegisterXLL(str(target))
+            for file in files:
+                book=app.Workbooks.Add()
+                book.SaveAs(str(file),51)
+                book.Worksheets(1).Range("A1").Value2="saved by updater"
+                del book
+            app.Workbooks(csv.name).Close(False)
+            main=Desktop(backend="uia").window(handle=app.Hwnd)
+            def click():
+                main.child_window(title="Python",control_type="TabItem").select()
+                main.child_window(title="Check for Updates",control_type="Button").invoke()
+            click()
+            press(win32con.IDNO)
+            wait_for(lambda:not list(base.glob("*.tmp")))
+            assert not app.ActiveWorkbook.Saved and digest(target)==before
+            print("PASS: declining restart left workbooks open, unsaved changes intact and XLL unchanged",flush=True)
+            unsaved=app.Workbooks.Add()
+            unsaved.Worksheets(1).Range("A1").Value2="unsaved text"
+            main=Desktop(backend="uia").window(handle=app.Hwnd)
+            click()
+            press(win32con.IDYES)
+            dialog=wait_for(lambda:next((h for h in dialogs(proc.pid) if win32gui.GetWindowText(h)=="Save As"),None))
+            win32gui.PostMessage(dialog,win32con.WM_CLOSE,0,0)
+            wait_for(lambda:not list(base.glob("*.tmp")))
+            assert unsaved.Worksheets(1).Range("A1").Value2=="unsaved text" and digest(target)==before
+            unsaved.Close(False)
+            del unsaved
+            main=Desktop(backend="uia").window(handle=app.Hwnd)
+            print("PASS: canceling Save As kept the untitled workbook and its edits open",flush=True)
+            click()
+            app=None
+            gc.collect()
+            press(win32con.IDYES)
+            proc.wait(100)
+            new_pid=wait_for(replacement_pid,35)
+            def reconnect():
+                for h in Desktop(backend="win32").windows(process=new_pid,visible_only=True):
+                    if h.window_text()=="Microsoft Excel Security Notice":
+                        notice=Desktop(backend="uia").window(handle=h.handle)
+                        paths=[Path(e.window_text()) for e in notice.descendants(control_type="Edit")]
+                        if target in paths and digest(target)==sha:
+                            notice.child_window(title="Enable this add-in for this session only.",control_type="Button").invoke()
+                return connect(new_pid,files[0])
+            restored=wait_for(reconnect,150)
+            for file in files:
+                assert restored.Workbooks(file.name).Worksheets(1).Range("A1").Value2=="saved by updater"
+            assert digest(target)==sha
+            print("PASS: restarted Excel, verified release digest, reopened both edited workbooks including Unicode path",flush=True)
+        finally:
+            if restored is not None:
+                restored.DisplayAlerts=False
+                restored.Quit()
+            new_pid=replacement_pid()
+            if new_pid:
+                p=psutil.Process(new_pid)
+                try:p.wait(8)
+                except psutil.TimeoutExpired:p.kill();p.wait()
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+
+
+if __name__=="__main__":
+    test(Path(sys.argv[1]))

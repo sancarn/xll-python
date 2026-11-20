@@ -9,9 +9,9 @@ def scale(value: Annotated[float, "Number to scale"], factor: float = 2) -> floa
     return value * factor
 
 
-async def delayed(value: float) -> Annotated[float, Function(name="PY.DELAYED")]:
-    """Return a number asynchronously."""
-    await asyncio.sleep(0.1)
+async def delayed(value: float, seconds: float = 2) -> Annotated[float, Function(name="PY.DELAYED")]:
+    """Return a number after the requested delay while the workbook remains usable."""
+    await asyncio.sleep(seconds)
     return value
 
 

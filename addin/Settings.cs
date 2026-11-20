@@ -9,6 +9,8 @@ namespace PythonExcel
     internal sealed class FolderWindow : Form
     {
         readonly ListBox functions = new ListBox(), packages = new ListBox();
+        internal Settings Selection => new Settings { folders=functions.Items.Cast<string>().ToArray(),
+                                                      packages=packages.Items.Cast<string>().ToArray() };
 
         internal FolderWindow()
         {
@@ -21,14 +23,14 @@ namespace PythonExcel
             var footer=new FlowLayoutPanel{Dock=DockStyle.Bottom,AutoSize=true,FlowDirection=FlowDirection.RightToLeft};
             var save=Ui.Button("Save", (s,e)=> {
                 try {
-                    Runtime.SaveSettings(new Settings { folders=functions.Items.Cast<string>().ToArray(),
-                                                         packages=packages.Items.Cast<string>().ToArray() });
+                    Runtime.SaveSettings(Selection);
                     DialogResult=DialogResult.OK;
                 } catch (Exception error) { MessageBox.Show(error.Message,Text); }
             });
             footer.Controls.Add(save);
+            footer.Controls.Add(Ui.Button("Refresh",(s,e)=>{ DialogResult=DialogResult.Retry; }));
             footer.Controls.Add(Ui.Button("Cancel",(s,e)=>Close()));
-            footer.Controls.Add(new Label{Text="Changes take effect when Excel restarts.",AutoSize=true,Margin=new Padding(6,9,6,0)});
+            footer.Controls.Add(new Label{Text="Refresh saves these folders and reloads functions now.",AutoSize=true,Margin=new Padding(6,9,6,0)});
             Controls.Add(tabs); Controls.Add(footer); AcceptButton=save;
         }
 

@@ -15,13 +15,8 @@ namespace PythonExcel
             try
             {
                 var settings = Runtime.LoadSettings();
-                var discovered = (IDictionary)Runtime.Request(new { op = "discover", settings.folders, settings.packages });
-                foreach (IDictionary function in (IList)discovered["functions"])
-                    Functions.Register(function);
-                foreach (string error in (IList)discovered["errors"]) Runtime.Log(error);
-                Runtime.Log("Loaded " + ((IList)discovered["functions"]).Count + " Python worksheet functions.");
-                if (((IList)discovered["errors"]).Count != 0)
-                    ExcelDna.Logging.LogDisplay.WriteLine("Python startup errors. See " + Runtime.Root + @"\python-excel.log");
+                if (settings.folders.Length != 0 || settings.packages.Length != 0)
+                    Functions.Load(settings, false);
             }
             catch (Exception e)
             {
@@ -35,7 +30,57 @@ namespace PythonExcel
 
     internal static class Functions
     {
-        internal static void Register(IDictionary f)
+        sealed class Registration
+        {
+            internal string Signature;
+            internal double Id;
+        }
+
+        static readonly Dictionary<string,Registration> registered = new Dictionary<string,Registration>(StringComparer.OrdinalIgnoreCase);
+        static int generation;
+
+        internal static void Load(Settings settings, bool refresh)
+        {
+            var discovered = (IDictionary)Runtime.Request(new {op="discover", settings.folders, settings.packages, refresh});
+            var errors = (IList)discovered["errors"];
+            foreach (string error in errors) Runtime.Log(error);
+            if (errors.Count != 0)
+            {
+                ExcelDna.Logging.LogDisplay.WriteLine("Python startup errors. See " + Runtime.Root + @"\python-excel.log");
+            }
+            var entries = ((IList)discovered["functions"]).Cast<IDictionary>()
+                .ToDictionary(f => (string)f["name"], StringComparer.OrdinalIgnoreCase);
+            foreach (string name in registered.Keys.ToArray())
+            {
+                if (entries.TryGetValue(name, out var entry) && registered[name].Signature == Runtime.Json.Serialize(entry))
+                    continue;
+                // Excel's Function Wizard retains the name unless it is cleared as a command.
+                XlCall.Excel(XlCall.xlfUnregister, registered[name].Id);
+                var command = XlCall.Excel(XlCall.xlfRegister, ExcelDnaUtil.XllPath, "xlAutoRemove", "I", name, ExcelMissing.Value, 2);
+                if (command is double)
+                {
+                    XlCall.Excel(XlCall.xlfSetName, name);
+                    XlCall.Excel(XlCall.xlfUnregister, command);
+                }
+                registered.Remove(name);
+            }
+            foreach (var pair in entries)
+                if (!registered.ContainsKey(pair.Key))
+                {
+                    Register(pair.Value);
+                    registered.Add(pair.Key, new Registration { Signature=Runtime.Json.Serialize(pair.Value),
+                        Id=(double)XlCall.Excel(XlCall.xlfEvaluate, pair.Key) });
+                }
+            generation++;
+            Runtime.Log("Loaded " + entries.Count + " Python worksheet functions.");
+            if (refresh)
+            {
+                dynamic app = ExcelDnaUtil.Application;
+                app.CalculateFullRebuild();
+            }
+        }
+
+        static void Register(IDictionary f)
         {
             string name = (string)f["name"];
             bool async = (bool)f["asynchronous"];
@@ -44,19 +89,12 @@ namespace PythonExcel
             var callArgs = new List<Expression> { Expression.Constant(name), Expression.NewArrayInit(typeof(object), parameters) };
             var attrs = inputs.Select(a => (object)new ExcelArgumentAttribute
                 {Name=(string)a["name"], Description=(string)a["description"], AllowReference=(bool)a["reference"]}).ToList();
-            if (async)
-            {
-                var handle = Expression.Parameter(typeof(ExcelAsyncHandle), "asyncHandle");
-                parameters.Add(handle);
-                callArgs.Add(handle);
-                attrs.Add(new ExcelArgumentAttribute());
-            }
             var call = Expression.Call(typeof(Functions), async ? nameof(CallAsync) : nameof(Call), null, callArgs.ToArray());
             var excel = new ExcelFunctionAttribute {
                 Name = name, Description = (string)f["description"], Category = (string)f["category"],
-                IsThreadSafe = (bool)f["thread_safe"], IsMacroType = (bool)f["macro_type"],
+                IsThreadSafe = !async && (bool)f["thread_safe"], IsMacroType = (bool)f["macro_type"],
                 IsHidden = (bool)f["hidden"], IsVolatile = (bool)f["volatile"], HelpTopic = (string)f["help_topic"],
-                IsClusterSafe = (bool)f["cluster_safe"]
+                IsClusterSafe = !async && (bool)f["cluster_safe"], SuppressOverwriteError = true
             };
             ExcelIntegration.RegisterLambdaExpressions(new List<LambdaExpression>{Expression.Lambda(call, parameters)},
                 new List<object>{excel}, new List<List<object>>{attrs});
@@ -111,13 +149,14 @@ namespace PythonExcel
             catch (Exception e) { Runtime.Log(name + "\n" + e.Message); return ExcelError.ExcelErrorValue; }
         }
 
-        public static void CallAsync(string name, object[] arguments, ExcelAsyncHandle handle)
+        public static object CallAsync(string name, object[] arguments)
         {
-            Task.Run(() =>
-            {
-                try { handle.SetResult(Call(name, arguments)); }
-                catch (Exception e) { Runtime.Log(name + "\n" + e.Message); }
-            });
+            // Excel can finish the calculation pass while its RTD subscription is pending.
+            // Wrap completed values to distinguish a legitimate Python #N/A from RTD's initial #N/A.
+            var result = ExcelAsyncUtil.RunTask(name + ":" + generation, arguments,
+                () => Task.Run(() => Tuple.Create(Call(name, arguments))));
+            if (result is Tuple<object> completed) return completed.Item1;
+            return Equals(result, ExcelError.ExcelErrorNA) ? (object)"Waiting…" : result;
         }
     }
 }

@@ -1,0 +1,228 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Net.Http;
+using System.Runtime.InteropServices;
+using System.Security.Authentication;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using ExcelDna.Integration;
+using PythonExcel.Update;
+
+namespace PythonExcel
+{
+    internal static class Updates
+    {
+        const string Repository = "sancarn/xll-python";
+        const string AssetName = "PythonExcel.xll";
+        const string Caption = "Python for Excel update";
+        static int busy;
+
+        sealed class Asset
+        {
+            public string name { get; set; }
+            public string digest { get; set; }
+            public long size { get; set; }
+            public string browser_download_url { get; set; }
+        }
+
+        sealed class Release
+        {
+            public string tag_name { get; set; }
+            public Asset[] assets { get; set; }
+        }
+
+        static Version VersionOf(string tag)
+        {
+            if (!Regex.IsMatch(tag ?? "", @"^v\d+\.\d+\.\d+$"))
+                throw new InvalidDataException("Unrecognized release version: " + tag);
+            return Version.Parse(tag.Substring(1));
+        }
+
+        internal static async void Check()
+        {
+            if (Interlocked.Exchange(ref busy, 1) != 0) return;
+            string staged = null;
+            try
+            {
+                string target = ExcelDnaUtil.XllPath;
+                string version;
+                using (var reader = new StreamReader(typeof(Updates).Assembly.GetManifestResourceStream("release.txt")))
+                    version = reader.ReadToEnd().Trim();
+                using (var client = new HttpClient(new HttpClientHandler { SslProtocols = SslProtocols.Tls12 })
+                    { Timeout = TimeSpan.FromMinutes(3) })
+                {
+                    client.DefaultRequestHeaders.UserAgent.ParseAdd("PythonExcel-Updater/1.0");
+                    var json = await client.GetStringAsync("https://api.github.com/repos/" + Repository + "/releases/latest").ConfigureAwait(false);
+                    var release = Runtime.Json.Deserialize<Release>(json);
+                    var asset = release.assets.Single(a => a.name == AssetName);
+                    if (!Regex.IsMatch(asset.digest ?? "", "^sha256:[a-f0-9]{64}$") || asset.size <= 0)
+                        throw new InvalidDataException("GitHub did not provide a valid SHA-256 digest and size.");
+                    string hash = asset.digest.Substring(7);
+                    string original = RestartPlan.Hash(target);
+                    if (VersionOf(release.tag_name) < VersionOf(version) || original == hash)
+                    {
+                        Report("You already have the latest available update.");
+                        return;
+                    }
+                    string url = "https://github.com/" + Repository + "/releases/download/" + release.tag_name + "/" + AssetName;
+                    if (asset.browser_download_url != url) throw new InvalidDataException("Unexpected GitHub asset URL.");
+                    staged = target + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                    using (var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false))
+                    {
+                        response.EnsureSuccessStatusCode();
+                        using (var output = new FileStream(staged, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                        using (var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(3)))
+                        using (var source = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                            await source.CopyToAsync(output, 81920, deadline.Token).ConfigureAwait(false);
+                    }
+                    if (new FileInfo(staged).Length != asset.size || RestartPlan.Hash(staged) != hash)
+                        throw new InvalidDataException("The downloaded add-in failed verification.");
+
+                    var plan = new RestartPlan { Target=target, Staged=staged, OriginalHash=original, ReleaseHash=hash };
+                    ExcelAsyncUtil.QueueAsMacro(() => Confirm(plan, release.tag_name));
+                    staged = null; // Confirm or the helper owns the verified file.
+                }
+            }
+            catch (Exception e)
+            {
+                Discard(staged);
+                Report("Could not check or download the update.\n" + e.GetBaseException().Message);
+            }
+        }
+
+        static void Discard(string path)
+        {
+            if (path == null) return;
+            try { File.Delete(path); }
+            catch (IOException e) { Runtime.Log(e.Message); }
+            catch (UnauthorizedAccessException e) { Runtime.Log(e.Message); }
+        }
+
+        static void Report(string message)
+        {
+            ExcelAsyncUtil.QueueAsMacro(() => {
+                try { MessageBox.Show(new Owner(), message, Caption); }
+                finally { Interlocked.Exchange(ref busy, 0); }
+            });
+        }
+
+        static void Confirm(RestartPlan plan, string version)
+        {
+            Process helper = null;
+            bool handedOff = false;
+            try
+            {
+                if (MessageBox.Show(new Owner(), "Install " + version + "? This will save your workbooks, restart this Excel instance, " +
+                    "and reopen its workbooks. Excel will ask where to save new workbooks. Continue?", Caption,
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+
+                dynamic app = ExcelDnaUtil.Application;
+                plan.Files = SaveAndCollect(app, plan.Target);
+                plan.Arguments(); // Validate the relaunch before closing anything.
+                using (var current = Process.GetCurrentProcess()) plan.ParentPid = current.Id;
+                helper = Process.Start(new ProcessStartInfo(HelperPath()) {
+                    UseShellExecute=false, CreateNoWindow=true, RedirectStandardInput=true, RedirectStandardOutput=true,
+                    StandardOutputEncoding=Encoding.UTF8
+                });
+                // ASCII JSON avoids the system console code page changing Unicode workbook paths.
+                string json = Regex.Replace(Runtime.Json.Serialize(plan), @"[^\u0000-\u007F]",
+                    m => "\\u" + ((int)m.Value[0]).ToString("x4"));
+                helper.StandardInput.WriteLine(json);
+                helper.StandardInput.Close();
+                string ack = helper.StandardOutput.ReadLine();
+                if (ack != "READY") throw new IOException(ack ?? "The restart helper could not start.");
+                var child = helper;
+                child.Exited += (s,e) => Interlocked.Exchange(ref busy, 0);
+                child.EnableRaisingEvents = true;
+                handedOff = true;
+                try { app.Quit(); }
+                catch (COMException e) when ((uint)e.ErrorCode == 0x80010108) { return; }
+                catch { handedOff = false; throw; }
+                // Quit is deferred until the ribbon macro returns. Check for a workbook veto
+                // on a later idle turn, after Excel has processed its pending shutdown.
+                Task.Delay(2000).ContinueWith(_ => {
+                    if (!child.HasExited) ExcelAsyncUtil.QueueAsMacro(() =>
+                    {
+                        dynamic live = ExcelDnaUtil.Application;
+                        if (live.Workbooks.Count > 0 && !child.HasExited)
+                        {
+                            child.Kill();
+                            child.WaitForExit();
+                            Discard(plan.Staged);
+                        }
+                    });
+                });
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception e) { MessageBox.Show(new Owner(), e.Message, Caption); }
+            finally
+            {
+                if (!handedOff)
+                {
+                    if (helper != null)
+                    {
+                        if (!helper.HasExited) { helper.Kill(); helper.WaitForExit(); }
+                        helper.Dispose();
+                    }
+                    Discard(plan.Staged);
+                    Interlocked.Exchange(ref busy, 0);
+                }
+            }
+        }
+
+        static string[] SaveAndCollect(dynamic app, string target)
+        {
+            if (app.ProtectedViewWindows.Count != 0)
+                throw new IOException("Close the Protected View windows before restarting so you can choose how to reopen them.");
+            var books = new List<object>();
+            foreach (object book in app.Workbooks) books.Add(book);
+            foreach (dynamic book in books)
+            {
+                if (String.IsNullOrEmpty(book.Path) || (!book.Saved && book.ReadOnly))
+                {
+                    book.Activate();
+                    if (!(bool)app.Dialogs[5].Show()) throw new OperationCanceledException(); // xlDialogSaveAs
+                }
+                else if (!book.Saved) book.Save();
+            }
+            var files = new List<string>();
+            bool installed = false;
+            foreach (dynamic addin in app.AddIns)
+                if (addin.Installed && String.Equals(addin.FullName, target, StringComparison.OrdinalIgnoreCase)) installed = true;
+            if (!installed) files.Add(target);
+            string[] automatic = { app.StartupPath, app.AltStartupPath, Path.Combine((string)app.Path, "XLSTART") };
+            foreach (dynamic book in app.Workbooks)
+            {
+                if (!book.Saved || String.IsNullOrEmpty(book.Path))
+                    throw new IOException("Excel could not save " + book.Name + ". The update was canceled.");
+                if (!automatic.Contains((string)book.Path, StringComparer.OrdinalIgnoreCase))
+                    files.Add((string)book.FullName);
+            }
+            return files.ToArray();
+        }
+
+        static string HelperPath()
+        {
+            string dir = Path.Combine(Runtime.Root, "updaters");
+            Directory.CreateDirectory(dir);
+            string temp = Path.Combine(dir, Guid.NewGuid().ToString("N") + ".tmp");
+            try
+            {
+                using (var resource = typeof(Updates).Assembly.GetManifestResourceStream("updater.exe"))
+                using (var file = File.Create(temp)) resource.CopyTo(file);
+                string hash = RestartPlan.Hash(temp);
+                string path = Path.Combine(dir, hash + ".exe");
+                try { File.Move(temp, path); }
+                catch (IOException) when (File.Exists(path) && RestartPlan.Hash(path) == hash) { }
+                return path;
+            }
+            finally { File.Delete(temp); }
+        }
+    }
+}

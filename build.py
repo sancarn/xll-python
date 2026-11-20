@@ -1,8 +1,11 @@
 """Build the single 64-bit Windows Excel add-in with Python 3.10+ and VS Build Tools."""
 import concurrent.futures
+import ctypes
+from ctypes import wintypes
 from hashlib import sha256
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -60,6 +63,29 @@ def payload(inputs):
     return runtime
 
 
+def embed_runtime(xll, runtime):
+    """Store the install archive as an ordinary Win32 RCDATA resource."""
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    begin = kernel.BeginUpdateResourceW
+    begin.argtypes = [wintypes.LPCWSTR, wintypes.BOOL]
+    begin.restype = wintypes.HANDLE
+    update = kernel.UpdateResourceW
+    update.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.LPCWSTR,
+                       wintypes.WORD, ctypes.c_void_p, wintypes.DWORD]
+    end = kernel.EndUpdateResourceW
+    end.argtypes = [wintypes.HANDLE, wintypes.BOOL]
+    data = runtime.read_bytes()
+    handle = begin(str(xll), False)
+    if not handle:
+        raise ctypes.WinError(ctypes.get_last_error())
+    if not update(handle, 10, "PYTHON_RUNTIME", 0, data, len(data)):
+        error = ctypes.WinError(ctypes.get_last_error())
+        end(handle, True)
+        raise error
+    if not end(handle, False):
+        raise ctypes.WinError(ctypes.get_last_error())
+
+
 def main():
     os.chdir(ROOT)
     with concurrent.futures.ThreadPoolExecutor(5) as pool:
@@ -94,13 +120,20 @@ def main():
     manifest = out/"versions.txt"
     manifest.write_text("\n".join(sha256(f.read_bytes()).hexdigest() for f in (runtime,support)))
     refs = ["System.dll","System.Core.dll","System.Drawing.dll","System.Windows.Forms.dll",
-            "System.Web.Extensions.dll","System.IO.Compression.dll","Microsoft.CSharp.dll"]
+            "System.Web.Extensions.dll","System.IO.Compression.dll","System.Net.Http.dll","Microsoft.CSharp.dll"]
     csc = vs/"MSBuild/Current/Bin/Roslyn/csc.exe"
+    release = os.environ.get("PYTHONEXCEL_RELEASE_TAG", "v0.2.0")
+    if not re.fullmatch(r"v\d+\.\d+\.\d+", release):
+        raise ValueError("Expected a release tag such as v0.2.1")
+    (out/"release.txt").write_text(release, encoding="ascii")
+    run(csc, "/nologo", "/target:winexe", "/optimize+", "/out:"+str(out/"updater.exe"),
+        "/r:System.Web.Extensions.dll", "/r:System.Windows.Forms.dll", *sorted((ROOT/"updater").glob("*.cs")))
     run(csc,"/nologo","/target:library","/optimize+","/platform:x64","/out:"+str(out/"PythonExcel.dll"),
         *("/r:"+x for x in refs), "/r:"+str(DNA/"ExcelDna.Integration.dll"),
-        *("/r:"+str(f) for f in web_dlls), "/resource:"+str(runtime)+",runtime.zip",
+        *("/r:"+str(f) for f in web_dlls),
         "/resource:"+str(support)+",support.zip", "/resource:"+str(manifest)+",versions.txt",
-        *sorted((ROOT/"addin").glob("*.cs")))
+        "/resource:"+str(out/"updater.exe")+",updater.exe", "/resource:"+str(out/"release.txt")+",release.txt",
+        ROOT/"updater/RestartPlan.cs", *sorted((ROOT/"addin").glob("*.cs")))
     for f in web_dlls:
         shutil.copy2(f,out/f.name)
     shutil.copy2(ROOT/"addin/PythonExcel.dna",out/"PythonExcel.dna")
@@ -108,6 +141,7 @@ def main():
     DIST.mkdir(exist_ok=True)
     run(vs/"MSBuild/Current/Bin/MSBuild.exe", ROOT/"addin/pack.proj", "/nologo", "/verbosity:minimal")
     artifact = DIST / "PythonExcel.xll"
+    embed_runtime(out/"PythonExcel-packed.xll", runtime)
     os.replace(out/"PythonExcel-packed.xll", artifact)
     print(artifact)
 

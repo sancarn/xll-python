@@ -18,7 +18,7 @@ class Function:
 
 
 def function(fn=None, **options):
-    """Export a function. An async def automatically registers as native async."""
+    """Export a function. An async def publishes its result through Excel RTD."""
     def decorate(target):
         target.__excel_function__ = Function(**options)
         return target

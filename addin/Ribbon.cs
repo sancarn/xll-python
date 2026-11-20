@@ -22,6 +22,7 @@ namespace PythonExcel
     <group id='xllPythonSetup' label='Environment'>
       <button id='xllPythonPip' label='Package Installer' size='large' imageMso='AddInManager' onAction='Packages'/>
       <button id='xllPythonFolders' label='Startup Folders' size='large' imageMso='FileOpen' onAction='Folders'/>
+      <button id='xllPythonUpdate' label='Check for Updates' size='large' imageMso='RefreshAll' onAction='CheckUpdates'/>
     </group>
   </tab></tabs></ribbon>
 </customUI>";
@@ -34,7 +35,15 @@ namespace PythonExcel
 
         public void Folders(IRibbonControl control) => Guard(() =>
         {
-            using (var dialog = new FolderWindow()) dialog.ShowDialog(new Owner());
+            using (var dialog = new FolderWindow())
+                if (dialog.ShowDialog(new Owner()) == DialogResult.Retry)
+                {
+                    var settings = dialog.Selection;
+                    ExcelAsyncUtil.QueueAsMacro(() => Guard(() => {
+                        Functions.Load(settings, true);
+                        Runtime.SaveSettings(settings);
+                    }));
+                }
         });
 
         public void Packages(IRibbonControl control) => Guard(() =>
@@ -44,6 +53,7 @@ namespace PythonExcel
         });
 
         public void OpenIde(IRibbonControl control) => Guard(IdeWindow.Open);
+        public void CheckUpdates(IRibbonControl control) => Guard(Updates.Check);
 
         public void RunScript(IRibbonControl control) => Guard(() =>
         {

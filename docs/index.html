@@ -48,20 +48,21 @@
         <a href="#editor" id="tab-editor"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-14-2 18"/></svg>Code editor</a>
         <a href="#console" id="tab-console"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4" width="19" height="16" rx="2"/><path d="m6 9 3 3-3 3m6 0h5"/></svg>Console</a>
         <a href="#packages" id="tab-packages"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 2 9 5v10l-9 5-9-5V7zM3 7l9 5 9-5m-9 5v10M7 4.7l9 5"/></svg>Packages</a>
-        <a href="#compiler" id="tab-compiler"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h8v7H3zM13 13h8v7h-8zM15 6h4v4M5 14v4h5"/></svg>XLL compiler</a>
-        <a href="#embedded-runtime" id="tab-embedded-runtime"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2v3m6-3v3M9 19v3m6-3v3M2 9h3m-3 6h3m14-6h3m-3 6h3"/></svg>Embedded Runtime</a>
+        <span class="tour-nav-pair">
+          <a href="#compiler" id="tab-compiler"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h8v7H3zM13 13h8v7h-8zM15 6h4v4M5 14v4h5"/></svg>XLL compiler</a>
+          <a href="#embedded-runtime" id="tab-embedded-runtime"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2v3m6-3v3M9 19v3m6-3v3M2 9h3m-3 6h3m14-6h3m-3 6h3"/></svg>Embedded Runtime</a>
+        </span>
       </nav>
       <article class="panel" id="worksheet">
         <div class="description"><h3>Call Python from a cell</h3><p>Save the example file in a folder you trust. In <b>Python → Startup Folders</b>, add that folder under <b>Worksheet functions</b> and choose <b>Refresh</b>.</p><p>Open the <a href="assets/Forecast.xlsx" download>starter workbook</a>. In D3, enter <code>=FORECAST.UNITS(B3,C3)</code> to get 1,400. Fill the formula down to D6 for the other regions.</p><a href="assets/forecast.py" download>Download forecast.py</a></div>
         <a class="capture" href="assets/worksheet.png" aria-label="Open full-size screenshot: Worksheet functions"><img src="assets/worksheet.png" width="992" height="453" loading="lazy" alt="Excel’s Python ribbon and the FORECAST.UNITS formula returning 1,400 in cell D3."></a>
       </article>
-      <article class="panel" id="live-data">
+      <article class="panel example-panel" id="live-data">
         <div class="description">
           <h3>Stream values into a cell</h3>
           <p>The generator runs in the background. Each <code>yield</code> sends a value to Excel, and the cell automatically shows the latest one.</p>
           <p>Load the <a href="https://github.com/sancarn/xll-python/blob/main/examples/functions.py">example functions</a> in a <a href="#worksheet">worksheet startup folder</a>, then enter <code>=XLLPY.live_random()</code>. The generator picks a random number every two seconds. Fill the formula down and each cell gets its own sequence.</p>
-        </div>
-        <pre class="tour-code"><code><span class="keyword">from</span> random <span class="keyword">import</span> random
+          <pre class="tour-code"><code><span class="keyword">from</span> random <span class="keyword">import</span> random
 <span class="keyword">from</span> time <span class="keyword">import</span> sleep
 <span class="keyword">from</span> xll_python <span class="keyword">import</span> function
 
@@ -71,19 +72,29 @@
     <span class="keyword">while True</span>:
         <span class="keyword">yield</span> random()
         sleep(<span class="num">2</span>)</code></pre>
+        </div>
+        <div class="feed-preview">
+          <a class="capture" href="assets/live-data.png" aria-label="Open the full-size live data example"><img src="assets/live-data.png" width="524" height="299" loading="lazy" alt="Four Excel cells running XLLPY.live_random() with their latest values and green data bars."></a>
+          <button type="button" data-recording="assets/live-data.gif" hidden>Play recording</button>
+          <noscript><a href="assets/live-data.gif">Play recording</a></noscript>
+        </div>
       </article>
-      <article class="panel" id="macros">
+      <article class="panel example-panel" id="macros">
         <div class="description">
           <h3>Run a Python macro from the ribbon</h3>
           <p>Use <code>@macro</code> to list a Python function under the name you choose. Save this example in a <a href="#worksheet">worksheet startup folder</a> and choose <b>Refresh</b> in <b>Python → Startup Folders</b>.</p>
           <p>Select a range, open <b>Python → Run Macro</b>, choose <b>Show selection</b> and click <b>Run</b>. The macro prints the address of the selected cells.</p>
           <a href="https://github.com/sancarn/xll-python#automate-excel-from-python">Macro guide</a>
-        </div>
-        <pre class="tour-code"><code><span class="keyword">from</span> xll_python <span class="keyword">import</span> Application, macro
+          <pre class="tour-code"><code><span class="keyword">from</span> xll_python <span class="keyword">import</span> Application, macro
 
 <span class="decor">@macro</span>(name=<span class="string">"Show selection"</span>)
 <span class="keyword">def</span> <span class="fn">show_selection</span>():
     print(Application.Selection.Address)</code></pre>
+        </div>
+        <div class="macro-captures">
+          <a class="capture" href="assets/macro-picker.png" aria-label="Open the full-size Run Macro screenshot"><img src="assets/macro-picker.png" width="584" height="197" loading="lazy" alt="The Run Macro dialog with Show selection selected and the Run button ready."></a>
+          <a class="capture" href="assets/macro-output.png" aria-label="Open the full-size macro output screenshot"><img src="assets/macro-output.png" width="584" height="127" loading="lazy" alt="The Python output window prints $B$3:$C$6 for the selected range and reports Finished."></a>
+        </div>
       </article>
       <article class="panel" id="editor">
         <div class="description"><h3>Edit the formula in Python</h3><p>Choose <b>Python → Open IDE</b> and open <code>forecast.py</code>. Saving a file in a worksheet startup folder reloads its functions and recalculates open workbooks.</p><p>To inspect a calculation, set a breakpoint, run <b>Excel: Debug Worksheet Functions</b> from the command palette, then recalculate the cell.</p><a href="https://github.com/sancarn/xll-python#excel-python-ide">Editor guide</a></div>
@@ -103,7 +114,7 @@
       </article>
       <article class="panel" id="embedded-runtime">
         <div class="description"><h3>Python is included</h3><p>You can use XLL Python even if you’ve never installed Python on your PC. The XLL includes CPython and its standard library.</p><p>The add-in unpacks its interpreter on first use and reuses it each time you open Excel. You can run the forecast example offline.</p><a href="#worksheet">Try the forecast example</a></div>
-        <a class="capture" href="assets/forecast.png" aria-label="Open full-size forecast worksheet"><img src="assets/forecast.png" width="576" height="304" loading="lazy" alt="The forecast worksheet showing the Python function’s result of 1,400 units for the North region."></a>
+        <img class="runtime-art" src="assets/embedded-runtime.webp" width="1672" height="941" loading="lazy" alt="The blue and yellow Python logo embedded in a stack of green Excel worksheets.">
       </article>
     </section>
 

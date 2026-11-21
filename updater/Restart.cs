@@ -48,7 +48,7 @@ namespace PythonExcel.Update
                     StartExcel(excel, args);
                     throw new IOException("Excel was reopened with the previous add-in. " + updateError.Message);
                 }
-                if (File.Exists(backup)) File.Delete(backup);
+                TryDelete(backup);
                 return 0;
             }
             catch (Exception e)
@@ -59,9 +59,16 @@ namespace PythonExcel.Update
             }
             finally
             {
-                if (ready && plan != null && File.Exists(plan.Staged))
-                    try { File.Delete(plan.Staged); } catch (IOException) { }
+                if (ready) TryDelete(plan.Staged);
             }
+        }
+
+        // Temporary-file cleanup must preserve the install or rollback result.
+        static void TryDelete(string path)
+        {
+            try { File.Delete(path); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
 
         static void StartExcel(string exe, string args)

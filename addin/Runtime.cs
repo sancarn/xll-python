@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -81,15 +82,75 @@ namespace PythonExcel
             return File.Exists(SettingsPath) ? Json.Deserialize<Settings>(File.ReadAllText(SettingsPath)) : new Settings();
         }
 
-        internal static void SaveSettings(Settings settings)
+        static string FolderKey(string path) => Path.GetFullPath(path).TrimEnd('\\', '/');
+
+        internal static bool SameFolder(string first, string second) =>
+            StringComparer.OrdinalIgnoreCase.Equals(FolderKey(first), FolderKey(second));
+
+        static void WithFolderLock(Action change)
+        {
+            using (var mutex = new Mutex(false, @"Local\XllPython.StartupFolders"))
+            {
+                try { mutex.WaitOne(); } catch (AbandonedMutexException) { }
+                try { change(); }
+                finally { mutex.ReleaseMutex(); }
+            }
+        }
+
+        internal static void SaveFolderSelection(Settings original, Settings selection, bool refresh)
+        {
+            string[] Apply(string[] latest, string[] before, string[] after)
+            {
+                if (latest.SequenceEqual(before, StringComparer.OrdinalIgnoreCase)) return after;
+                bool Contains(string[] paths, string path) => paths.Any(p => SameFolder(p, path));
+                return latest.Where(p => !Contains(before, p) || Contains(after, p))
+                    .Concat(after.Where(p => !Contains(before, p) && !Contains(latest, p))).ToArray();
+            }
+            WithFolderLock(() => {
+                var latest = LoadSettings();
+                latest.folders = Apply(latest.folders, original.folders, selection.folders);
+                latest.packages = Apply(latest.packages, original.packages, selection.packages);
+                if (refresh) Functions.Load(latest, true);
+                WriteJson(SettingsPath, latest);
+            });
+        }
+
+        internal static void ApplyWorkspaceFolder(string path, bool added, bool worksheet, bool package, bool remember)
+        {
+            WithFolderLock(() => {
+                if (remember)
+                {
+                    // The workspace file holds the chosen membership. Ribbon changes must preserve it.
+                    string file = Path.Combine(Root, "IDE", "workspaces", "explorer-choices.json");
+                    var choices = File.Exists(file) ? Json.Deserialize<List<string>>(File.ReadAllText(file)) : new List<string>();
+                    if (!choices.Any(p => SameFolder(p, path))) {
+                        choices.Add(path);
+                        WriteJson(file, choices);
+                    }
+                }
+                if (!worksheet && !package) return;
+                if (added && !Directory.Exists(path)) throw new DirectoryNotFoundException(path);
+                string[] Update(string[] paths)
+                {
+                    if (!added) return paths.Where(p => !SameFolder(p, path)).ToArray();
+                    return paths.Any(p => SameFolder(p, path)) ? paths : paths.Concat(new[] { path }).ToArray();
+                }
+                var settings = LoadSettings();
+                if (worksheet) settings.folders = Update(settings.folders);
+                if (package) settings.packages = Update(settings.packages);
+                WriteJson(SettingsPath, settings);
+            });
+        }
+
+        static void WriteJson(string file, object value)
         {
             Directory.CreateDirectory(Root);
-            string temp = SettingsPath + "." + Guid.NewGuid().ToString("N");
-            File.WriteAllText(temp, Json.Serialize(settings), Encoding.UTF8);
+            string temp = file + "." + Guid.NewGuid().ToString("N");
+            File.WriteAllText(temp, Json.Serialize(value), Encoding.UTF8);
             try
             {
-                if (File.Exists(SettingsPath)) File.Replace(temp, SettingsPath, null);
-                else File.Move(temp, SettingsPath);
+                if (File.Exists(file)) File.Replace(temp, file, null);
+                else File.Move(temp, file);
             }
             finally { if (File.Exists(temp)) File.Delete(temp); }
         }

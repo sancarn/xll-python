@@ -30,7 +30,7 @@ Installed packages persist for that runtime. Restart Excel after replacing an im
 
 ## Worksheet functions
 
-In **Python → Startup Folders → Worksheet functions**, add a folder containing your Python files. Choose **Refresh** to save the folder list, reload the Python files, and recalculate open workbooks. **Save** applies the folder list at the next Excel startup. The add-in scans top-level `.py` files, skipping names beginning with an underscore. A configured folder runs Python at Excel startup, so choose folders whose contents you trust. After editing a function or a helper module in a startup folder, choose **Refresh** again. A source or import error preserves the last working definitions. Functions are available in every open workbook.
+In **Python → Startup Folders → Worksheet functions**, add a folder containing your Python files. Choose **Refresh** to save the folder list, reload the Python files, and recalculate open workbooks. **Save** applies the folder list at the next Excel startup. The add-in scans top-level `.py` files, skipping names beginning with an underscore. A configured folder runs Python at Excel startup, so choose folders whose contents you trust. The IDE refreshes Excel when you save a Python file under a worksheet startup folder. For edits made outside the IDE, choose **Refresh** again. A source or import error preserves the last working definitions. Functions are available in every open workbook.
 
 To try the [working examples](examples/functions.py), add the repository’s `examples` folder. The XLL also extracts a copy under `%LOCALAPPDATA%\XllPython\support-…\examples`; copy it to your own editable folder before customizing it.
 
@@ -105,12 +105,12 @@ Public functions defined in the console with fixed positional parameters are ava
 
 ## Excel Python IDE
 
-Choose **Python → Open IDE** to open the bundled Eclipse Theia workbench. Explorer shows the worksheet folders and package links from **Startup Folders** together. The status bar identifies the Excel process and its Python version. The editor, Python highlighting, and Pyright completions for your modules, installed packages, and `xll_python` work offline with WebView2.
+Choose **Python → Open IDE** to open the bundled Eclipse Theia workbench. Explorer starts with the worksheet folders and package links from **Startup Folders**. Adding or removing a workspace folder prompts you to apply the change to Excel startup where relevant. Choose **No** to change only Explorer. Removing a package link has its own prompt. Excel remembers your workspace folders when you reopen the IDE. The status bar identifies the Excel process and its Python version. The editor, Python highlighting, and Pyright completions for your modules, installed packages, and `xll_python` work offline with WebView2.
 
 - Use the editor's **Run** button or **Ctrl+F5** to save and run the active Python file in that Excel process. Read its output or traceback in **Output → Excel Python**.
 - Click the gutter or press **F9** to toggle a breakpoint. Press **F5** in a Python editor to debug that file. Use the **Run** menu to step or continue, and the **Debug** view to inspect stack frames and variables.
 - To debug a worksheet calculation, open the command palette with **F1**, choose **Excel: Debug Worksheet Functions**, then recalculate the cell in Excel. Breakpoints also work in imported helpers. **Stop** detaches the debugger and lets the calculation finish.
-- After editing a registered function, use **Excel: Refresh Worksheet Functions** in the command palette to save changes, reload definitions, and recalculate. Reopen the IDE after changing the configured folders.
+- Saving a Python file under a worksheet startup folder reloads functions and recalculates the connected Excel instance. Nearby saves share one refresh. If a reload fails, the IDE shows the error and Excel keeps the last working functions. Use **Excel: Refresh Worksheet Functions** to reload explicitly, including after changing startup membership. Reopen the IDE to pick up folder changes made from the ribbon.
 
 The first IDE launch extracts the bundled workbench and Node.js helper. The helper runs locally for the lifetime of the window.
 

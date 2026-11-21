@@ -2,6 +2,8 @@ import { ContainerModule } from '@theia/core/shared/inversify';
 import { BackendApplicationContribution, EarlyExpressMiddleware } from '@theia/core/lib/node/backend-application';
 import { WsRequestValidatorContribution } from '@theia/core/lib/node/ws-request-validators';
 
+import { prepareWorkspace } from './workspace';
+
 const token = process.env.XLL_IDE_TOKEN;
 if (!token) throw new Error('Missing Excel IDE session');
 
@@ -15,6 +17,7 @@ function authorized(req) {
 export default new ContainerModule(bind => {
     bind(BackendApplicationContribution).toDynamicValue(({ container }) => ({
         initialize() {
+            prepareWorkspace(process.env.XLL_IDE_DEFAULTS);
             container.get(EarlyExpressMiddleware).handlers.push((req, res, next) => {
                 if (authorized(req)) next();
                 else res.sendStatus(403);

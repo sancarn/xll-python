@@ -9,6 +9,7 @@ namespace PythonExcel
     internal sealed class FolderWindow : Form
     {
         readonly ListBox functions = new ListBox(), packages = new ListBox();
+        internal readonly Settings Original = Runtime.LoadSettings();
         internal Settings Selection => new Settings { folders=functions.Items.Cast<string>().ToArray(),
                                                       packages=packages.Items.Cast<string>().ToArray() };
 
@@ -16,14 +17,13 @@ namespace PythonExcel
         {
             Text="Python startup folders"; ClientSize=new Size(660,400); MinimumSize=new Size(500,300);
             StartPosition=FormStartPosition.CenterParent;
-            var settings=Runtime.LoadSettings();
             var tabs=new TabControl{Dock=DockStyle.Fill};
-            AddPage(tabs,functions,settings.folders,"Worksheet functions","Load top-level .py files from these folders when Excel starts.");
-            AddPage(tabs,packages,settings.packages,"Package links","Add compatible site-packages or package parent folders to Python’s search path.");
+            AddPage(tabs,functions,Original.folders,"Worksheet functions","Load top-level .py files from these folders when Excel starts.");
+            AddPage(tabs,packages,Original.packages,"Package links","Add compatible site-packages or package parent folders to Python’s search path.");
             var footer=new FlowLayoutPanel{Dock=DockStyle.Bottom,AutoSize=true,FlowDirection=FlowDirection.RightToLeft};
             var save=Ui.Button("Save", (s,e)=> {
                 try {
-                    Runtime.SaveSettings(Selection);
+                    Runtime.SaveFolderSelection(Original, Selection, false);
                     DialogResult=DialogResult.OK;
                 } catch (Exception error) { MessageBox.Show(error.Message,Text); }
             });

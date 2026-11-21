@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using ExcelDna.Integration;
@@ -27,7 +28,8 @@ namespace PythonExcel
         Uri origin;
         bool closed, ready, closing, allowClose;
         readonly Stopwatch closeWait = new Stopwatch();
-        string version;
+        string version, workspaceFile;
+        int refreshVersion;
 
         internal static void Open() => host.Open();
         internal static void Shutdown() => host.Shutdown();
@@ -77,7 +79,7 @@ namespace PythonExcel
             };
         }
 
-        string WriteWorkspace(IDictionary environment)
+        string WriteWorkspaceDefaults(IDictionary environment)
         {
             var settings = Runtime.LoadSettings();
             var roots = settings.folders.Concat(settings.packages).Distinct(StringComparer.OrdinalIgnoreCase);
@@ -100,7 +102,7 @@ namespace PythonExcel
                 key = BitConverter.ToString(hash.ComputeHash(content), 0, 12).Replace("-", "");
             string dir = Path.Combine(Runtime.Root, "IDE", "workspaces", key);
             Directory.CreateDirectory(dir);
-            string file = Path.Combine(dir, "Excel Python.theia-workspace");
+            string file = Path.Combine(dir, "defaults.json");
             if (!File.Exists(file)) {
                 string temp = file + "." + Guid.NewGuid().ToString("N");
                 File.WriteAllBytes(temp, content);
@@ -121,13 +123,15 @@ namespace PythonExcel
             var env = (IDictionary)await Task.Run(() => Runtime.Request(new { op = "ideEnvironment" }));
             if (closed) return;
             version = (string)env["version"];
-            string worksheet = WriteWorkspace(env);
+            string defaults = WriteWorkspaceDefaults(env);
+            workspaceFile = Path.Combine(Runtime.Root, "IDE", "workspaces", "Excel Python.theia-workspace");
             var info = new ProcessStartInfo(Path.Combine(dir, "node.exe"),
-                "lib/backend/main.js --hostname 127.0.0.1 --port 0 \"" + worksheet + "\"") {
+                "lib/backend/main.js --hostname 127.0.0.1 --port 0 \"" + workspaceFile + "\"") {
                 WorkingDirectory = dir, UseShellExecute = false, CreateNoWindow = true,
                 RedirectStandardOutput = true, RedirectStandardError = true
             };
             string hostname = "xll-" + Guid.NewGuid().ToString("N") + ".localhost";
+            info.EnvironmentVariables["XLL_IDE_DEFAULTS"] = defaults;
             info.EnvironmentVariables["XLL_IDE_HOST"] = hostname;
             info.EnvironmentVariables["XLL_IDE_TOKEN"] = token;
             info.EnvironmentVariables["THEIA_DEFAULT_PLUGINS"] = "local-dir:./plugins";
@@ -175,6 +179,40 @@ namespace PythonExcel
         bool IsLocal(string uri) => Uri.TryCreate(uri, UriKind.Absolute, out var target)
             && target.GetLeftPart(UriPartial.Authority) == origin.GetLeftPart(UriPartial.Authority);
 
+        Task WorkspaceFolderChanged(string path, bool added, string workspace)
+        {
+            path = Path.GetFullPath(path);
+            var settings = Runtime.LoadSettings();
+            bool worksheet = settings.folders.Any(folder => Runtime.SameFolder(folder, path));
+            bool package = settings.packages.Any(folder => Runtime.SameFolder(folder, path));
+            bool Confirm(string question) =>
+                MessageBox.Show(this, question + "\n\n" + path, "Excel startup folders", MessageBoxButtons.YesNo,
+                                MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) == DialogResult.Yes;
+            bool changeWorksheet = added
+                ? !worksheet && !package && Confirm("Also load worksheet functions from this folder when Excel starts?")
+                : worksheet && Confirm("Also remove this worksheet folder from Excel startup?");
+            bool changePackage = !added && package && Confirm("Also remove this folder from Excel's package links?");
+            bool remember = workspace != null && StringComparer.OrdinalIgnoreCase.Equals(Path.GetFullPath(workspace), workspaceFile);
+            return Task.Run(() => Runtime.ApplyWorkspaceFolder(path, added, changeWorksheet, changePackage, remember));
+        }
+
+        static bool LoadsFile(Settings settings, string file) =>
+            file.EndsWith(".py", StringComparison.OrdinalIgnoreCase) && settings.folders.Any(folder =>
+                file.StartsWith(Path.GetFullPath(folder).TrimEnd('\\', '/') + Path.DirectorySeparatorChar,
+                                StringComparison.OrdinalIgnoreCase));
+
+        async Task RefreshSaved(string path)
+        {
+            string file = Path.GetFullPath(path);
+            if (!LoadsFile(Runtime.LoadSettings(), file)) return;
+            int version = Interlocked.Increment(ref refreshVersion);
+            await Task.Delay(300).ConfigureAwait(false);
+            if (version != Volatile.Read(ref refreshVersion)) return;
+            await ExcelAsyncUtil.QueueAsMacroTask(() => {
+                if (version == Volatile.Read(ref refreshVersion)) Functions.Load(Runtime.LoadSettings(), true);
+            }).ConfigureAwait(false);
+        }
+
         async void Receive(object sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
             if (closed || !IsLocal(e.Source) || !IsLocal(web.CoreWebView2.Source)) return;
@@ -204,7 +242,14 @@ namespace PythonExcel
                         string access = (string)args["token"];
                         await Task.Run(() => Runtime.Request(new { op = "ideConnect", port, token = access, session = token }));
                         break;
+                    case "workspaceFolder":
+                        await WorkspaceFolderChanged((string)args["path"], (bool)args["added"], (string)args["workspace"]);
+                        break;
+                    case "refreshSaved":
+                        await RefreshSaved((string)args["path"]);
+                        break;
                     case "refresh":
+                        Interlocked.Increment(ref refreshVersion);
                         await ExcelAsyncUtil.QueueAsMacroTask(() => Functions.Load(Runtime.LoadSettings(), true));
                         break;
                     default: throw new ArgumentException("Unknown Excel IDE command.");

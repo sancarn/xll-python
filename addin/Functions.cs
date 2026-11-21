@@ -25,7 +25,7 @@ namespace PythonExcel
             }
         }
 
-        public void AutoClose() { ConsoleWindow.Shutdown(); IdeWindow.Shutdown(); }
+        public void AutoClose() { LiveFunction.DisconnectAll(); ConsoleWindow.Shutdown(); IdeWindow.Shutdown(); }
     }
 
     internal static class Functions
@@ -80,6 +80,7 @@ namespace PythonExcel
                         Id=(double)XlCall.Excel(XlCall.xlfEvaluate, pair.Key) });
                 }
             generation++;
+            LiveFunction.DisconnectAll();
             Runtime.Log("Loaded " + entries.Count + " Python worksheet functions.");
             if (recalculate)
             {
@@ -97,7 +98,13 @@ namespace PythonExcel
             var callArgs = new List<Expression> { Expression.Constant(name), Expression.NewArrayInit(typeof(object), parameters) };
             var attrs = inputs.Select(a => (object)new ExcelArgumentAttribute
                 {Name=(string)a["name"], Description=(string)a["description"], AllowReference=(bool)a["reference"]}).ToList();
-            var call = Expression.Call(typeof(Functions), async ? nameof(CallAsync) : nameof(Call), null, callArgs.ToArray());
+            string entryPoint = async ? nameof(CallAsync) : nameof(Call);
+            if ((bool)f["generator"])
+            {
+                entryPoint = nameof(CallLive);
+                callArgs.Add(Expression.Constant((string)f["generator_instances"] == "many"));
+            }
+            var call = Expression.Call(typeof(Functions), entryPoint, null, callArgs.ToArray());
             var excel = new ExcelFunctionAttribute {
                 Name = name, Description = (string)f["description"], Category = (string)f["category"],
                 IsThreadSafe = !async && (bool)f["thread_safe"], IsMacroType = (bool)f["macro_type"],
@@ -127,7 +134,7 @@ namespace PythonExcel
             return rows;
         }
 
-        static object ToExcel(object value)
+        internal static object ToExcel(object value)
         {
             if (value == null) return ExcelEmpty.Value;
             if (value is IDictionary map && map.Contains("error")) return (ExcelError)Convert.ToInt32(map["error"]);
@@ -163,6 +170,25 @@ namespace PythonExcel
             // Wrap completed values to distinguish a legitimate Python #N/A from RTD's initial #N/A.
             var result = ExcelAsyncUtil.RunTask(name + ":" + generation, arguments,
                 () => Task.Run(() => Tuple.Create(Call(name, arguments))));
+            return RtdValue(result);
+        }
+
+        public static object CallLive(string name, object[] arguments, bool perCell)
+        {
+            string topic = name + ":" + generation;
+            if (perCell)
+            {
+                var caller = XlCall.Excel(XlCall.xlfCaller) as ExcelReference;
+                if (caller == null) return ExcelError.ExcelErrorValue;
+                topic += ":" + caller.SheetId + ":" + caller.RowFirst + ":" + caller.ColumnFirst;
+            }
+            var result = ExcelAsyncUtil.Observe(topic, arguments,
+                () => new LiveFunction(name, arguments.Select(ToPython).ToArray()));
+            return RtdValue(result);
+        }
+
+        static object RtdValue(object result)
+        {
             if (result is Tuple<object> completed) return completed.Item1;
             return Equals(result, ExcelError.ExcelErrorNA) ? (object)"Waiting…" : result;
         }

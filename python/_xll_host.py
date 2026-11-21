@@ -23,9 +23,11 @@ import typing
 
 from xll_python import ExcelError, Function, Reference
 from _xll_repl import Console
+from _xll_streams import Streams
 
 
 _functions = {}
+_streams = Streams()
 _startup_entries = []
 _managed_paths = []
 _script_lock = threading.RLock()
@@ -113,7 +115,14 @@ def _register(fn, functions, entries, console_name=None):
         meta = _annotation(hints.get(par.name))[1:]
         args.append(dict(name=par.name, reference=_annotation(hints.get(par.name))[0] is Reference,
                          description=next((m for m in meta if isinstance(m, str)), "")))
-    asynchronous = opt.asynchronous if opt.asynchronous is not None else inspect.iscoroutinefunction(fn)
+    generator = inspect.isgeneratorfunction(fn) or inspect.isasyncgenfunction(fn)
+    if opt.generator_instances not in ("one", "many"):
+        raise ValueError(f"{name}: generator_instances must be 'one' or 'many'")
+    if not generator and opt.generator_instances == "many":
+        raise ValueError(f"{name}: generator_instances='many' requires a generator function")
+    if generator and opt.asynchronous is False:
+        raise ValueError(f"{name}: generators require asynchronous registration")
+    asynchronous = generator or (opt.asynchronous if opt.asynchronous is not None else inspect.iscoroutinefunction(fn))
     if inspect.iscoroutinefunction(fn) and not asynchronous:
         raise ValueError(f"{name}: async def requires asynchronous registration")
     if opt.macro_type and (opt.thread_safe or asynchronous):
@@ -121,7 +130,7 @@ def _register(fn, functions, entries, console_name=None):
     if len(args) > (254 if asynchronous else 255):
         raise ValueError(f"{name}: too many Excel arguments")
     entries.append(dict(dataclasses.asdict(opt), name=name, arguments=args,
-                        asynchronous=asynchronous, description=opt.description or inspect.getdoc(fn) or ""))
+                        generator=generator, asynchronous=asynchronous, description=opt.description or inspect.getdoc(fn) or ""))
     functions[name.upper()] = (fn, signature, hints)
 
 
@@ -307,7 +316,7 @@ def _encode(value):
     return value
 
 
-def _invoke(registration, args):
+def _call(registration, args):
     fn, signature, hints = registration
     values = []
     for par, value in zip(signature.parameters.values(), args):
@@ -317,7 +326,11 @@ def _invoke(registration, args):
             values.append(par.default)
         else:
             values.append(_convert(_decode(value), hints.get(par.name)))
-    result = fn(*values)
+    return fn(*values)
+
+
+def _invoke(registration, args):
+    result = _call(registration, args)
     if inspect.isawaitable(result):
         result = asyncio.run(result)
     return _encode(result)
@@ -406,13 +419,18 @@ def _preview(value):
 
 def _execute(operation, request):
     registration = None
-    if operation == "call":
+    if operation in ("call", "streamOpen"):
         registration = _functions.get(request["name"].upper())
         console = _worksheet_console
         if registration is None and console is not None:
             registration = console.functions.get(request["name"].upper())
         if registration is None:
+            if operation == "streamOpen":
+                raise KeyError(request["name"])
             return _encode(ExcelError(29))  # Excel can still call a deleted function from an existing formula.
+        if operation == "streamOpen":
+            _streams.open(request["id"], _call(registration, request["args"]), _encode)
+            return
     with _debug_lock:
         debug = _debug
         path = request["path"] if operation == "script" else registration[0].__code__.co_filename
@@ -461,8 +479,13 @@ def dispatch(message):
             value = _worksheet_entries()
         elif op == "discover":
             value = _discover(req["folders"], req["packages"], req.get("refresh", False))
-        elif op in ("call", "script"):
+        elif op in ("call", "script", "streamOpen"):
             value = _execute(op, req)
+        elif op == "streamClose":
+            _streams.close(req["id"])
+            value = None
+        elif op == "streamRead":
+            value = _streams.read()
         elif op == "arm":
             with _debug_lock:
                 if _debug:

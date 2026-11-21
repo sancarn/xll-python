@@ -1,5 +1,6 @@
 """Public API for worksheet function modules loaded by the Python ribbon."""
 from dataclasses import dataclass
+from typing import Literal
 
 
 @dataclass(frozen=True)
@@ -15,10 +16,11 @@ class Function:
     macro_type: bool = False
     cluster_safe: bool = False
     help_topic: str = ""
+    generator_instances: Literal["one", "many"] = "one"
 
 
 def function(fn=None, **options):
-    """Export a function. An async def publishes its result through Excel RTD."""
+    """Export a worksheet function. Generators publish each yield through Excel RTD."""
     def decorate(target):
         target.__excel_function__ = Function(**options)
         return target

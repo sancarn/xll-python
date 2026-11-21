@@ -1,6 +1,17 @@
 import asyncio
+import random
+import time
+from collections.abc import Iterator
 from typing import Annotated
 from xll_python import Function, function
+
+
+@function(name="XLLPY.live_random", category="Python examples", generator_instances="many")
+def live_random_number() -> Iterator[float]:
+    """Yield a new random number every two seconds."""
+    while True:
+        yield random.random()
+        time.sleep(2)
 
 
 @function(name="XLLPY.scale", category="Python examples", thread_safe=True)

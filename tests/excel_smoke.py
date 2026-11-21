@@ -39,6 +39,60 @@ def connect(pid, workbook):
                 return app
 
 
+def verify_streams(app, sheet, scripts):
+    def number(cell):
+        value = cell.Value2
+        return value if isinstance(value, float) else None
+
+    live = sheet.Range("N1")
+    live.Formula2 = "=XLLPY.live_random()"
+    first = wait_for(lambda: number(live))
+    sheet.Range("O1").Formula2 = "=N1*2"
+    def dependent_updated():
+        value, doubled = sheet.Range("N1:O1").Value2[0]
+        return isinstance(value, float) and value != first and doubled == 2 * value
+    wait_for(dependent_updated)
+
+    a, b, c = (sheet.Range(address) for address in ("N2", "N3", "N4"))
+    a.Formula2 = b.Formula2 = '=PY.SHARED("a")'
+    c.Formula2 = '=PY.SHARED("b")'
+    instance = wait_for(lambda: number(a))
+    wait_for(lambda: number(b) == instance)
+    assert wait_for(lambda: number(c)) != instance
+    same = sheet.Range("N5")
+    same.Formula2 = "=PY.PERCELL()-PY.PERCELL()"
+    wait_for(lambda: number(same) == 0)
+    cell = sheet.Range("N6")
+    cell.Formula2 = "=PY.PERCELL()"
+    cell_id = wait_for(lambda: number(cell))
+    other = app.Workbooks.Add()
+    try:
+        twin = other.Worksheets(1).Range("N6")
+        twin.Formula2 = "=PY.PERCELL()"
+        assert wait_for(lambda: number(twin)) != cell_id
+        twin.Formula2 = '=PY.SHARED("a")'
+        wait_for(lambda: number(twin) == instance)
+    finally:
+        other.Close(False)
+    app.CalculateFull()
+    wait_for(lambda: number(cell) == cell_id and number(a) == instance)
+    a.ClearContents()
+    closed = scripts / f"closed-{int(instance)}"
+    assert b.Value2 == instance and not closed.exists()
+    b.ClearContents()
+    wait_for(closed.exists)
+
+    for address, kind, expected in (("N7", "empty", 0), ("N8", "error", "#VALUE!"), ("N9", "na", "#N/A")):
+        target = sheet.Range(address)
+        target.Formula2 = f'=PY.FINITE("{kind}")'
+        wait_for(lambda: target.Text == expected if isinstance(expected, str) else target.Value2 == expected)
+    sheet.Range("P1").Formula2 = '=PY.FINITE("array")'
+    wait_for(lambda: sheet.Range("P1:Q2").Value2 == ((1., 2.), (3., 4.)))
+    sheet.Range("P1").ClearContents()
+    sheet.Range("N1:O9").ClearContents()
+    print("PASS: live updates, shared and per-cell generators, recalc, disconnect, completion and errors.", flush=True)
+
+
 def main():
     if "--ui" in sys.argv:
         from excel_ui import verify
@@ -58,6 +112,7 @@ def main():
         for d in (scripts,packages,profile):
             d.mkdir()
         (base/"book.csv").write_text("test\n")
+        shutil.copyfile(ROOT/"tests/stream_fixture.py", scripts/"streams.py")
         (packages/"linked_module.py").write_text(
             "from xll_python import function, Reference\nVALUE = 13\n"
             "@function(name='PY.ADDRESS')\ndef address(r: Reference): return list(r.areas[0])\n")
@@ -81,7 +136,7 @@ def main():
             assert app.RegisterXLL(str(standalone)), "Excel rejected XLL"
             log = (profile/"python-excel.log").read_text(encoding="utf-8-sig")
             print(log,flush=True)
-            assert "Loaded 6 Python worksheet functions." in log, log
+            assert "Loaded 10 Python worksheet functions." in log, log
             book=app.ActiveWorkbook
             sheet=book.Worksheets(1)
             sheet.Range("B1").Formula2 = "=XLLPY.scale(21)"
@@ -113,6 +168,7 @@ def main():
             another.Worksheets(1).Range("A1").Formula2 = "=XLLPY.scale(7)"
             assert another.Worksheets(1).Range("A1").Value2 == 14
             another.Close(False)
+            verify_streams(app, sheet, scripts)
             print("PASS: fresh single-XLL load, native CPython in EXCEL.EXE, pip, Tk, SSL, SQLite, package link, two workbooks, defaults, spills, nonblocking async and dependent recalculation.",flush=True)
             if "--ui" in sys.argv:
                 verify(app,proc.pid,base,home)

@@ -89,13 +89,21 @@ def verify(app, pid, base, home):
     helper=base/"scripts/_rates.py"
     helper.write_text("RATE = 11\n")
     script=base/"scripts/reload.py"
+    live_rate = (
+        "import asyncio\nfrom pathlib import Path\n"
+        "@function(name='PY.LIVE_RATE')\nasync def live_rate():\n"
+        "    try:\n        yield RATE\n        await asyncio.Event().wait()\n"
+        "    finally:\n        Path(__file__).with_name(f'closed-rate-{RATE}').touch()\n"
+    )
     script.write_text("from xll_python import function\nfrom _rates import RATE\n"
                       "@function(name='PY.RATE')\ndef rate(): return RATE + 1\n"
-                      "@function(name='PY.OLD')\ndef old(): return 7\n")
+                      "@function(name='PY.OLD')\ndef old(): return 7\n" + live_rate)
     refresh()
     wait_for(lambda:app.Evaluate("=PY.RATE()")==12)
     sheet.Range("M1").Formula2="=PY.RATE()"
     sheet.Range("M2").Formula2="=PY.OLD()"
+    sheet.Range("M3").Formula2="=PY.LIVE_RATE()"
+    wait_for(lambda:sheet.Range("M3").Value2==11)
     assert sheet.Range("M2").Value2==7
     # Same byte length and timestamp must still reload a previously imported helper.
     stamp=helper.stat()
@@ -103,9 +111,11 @@ def verify(app, pid, base, home):
     os.utime(helper,ns=(stamp.st_atime_ns,stamp.st_mtime_ns))
     script.write_text("from xll_python import function\nfrom _rates import RATE\n"
                       "@function(name='PY.RATE')\ndef rate(extra=3): return RATE + extra\n"
-                      "@function(name='PY.NEW')\ndef new(): return 8\n")
+                      "@function(name='PY.NEW')\ndef new(): return 8\n" + live_rate)
     refresh()
     wait_for(lambda:sheet.Range("M1").Value2==25)
+    wait_for(lambda:sheet.Range("M3").Value2==22)
+    wait_for((script.parent/"closed-rate-11").exists)
     assert app.Evaluate("=PY.RATE(5)")==27 and app.Evaluate("=PY.NEW()")==8
     assert sheet.Range("M2").Text in ("#NAME?", "#VALUE!"), sheet.Range("M2").Text
     print("PASS: live refresh reloaded source and imports, updated signatures, added and removed functions, and recalculated existing cells",flush=True)

@@ -18,7 +18,7 @@ from _xll_compile import resource_bytes
 
 def main():
     root = ROOT
-    workbench = root / "dist/PythonExcel.xll"
+    workbench = root / "dist/xll-python.xll"
     runtime_template = root / "dist/PythonExcelRuntime.xll"
     rcdata = ctypes.cast(10, wintypes.LPCWSTR)
     pack = root / ".build/pack"
@@ -90,7 +90,7 @@ def main():
     with zipfile.ZipFile(root/".build/runtime.zip") as archive:
         assert archive.testzip() is None
         assert b"PYTHON SOFTWARE FOUNDATION LICENSE" in archive.read("LICENSE.txt")
-    print("Verified workbench and runtime-only exports", hashlib.sha256((root/"dist/PythonExcel.xll").read_bytes()).hexdigest())
+    print("Verified workbench and runtime-only exports", hashlib.sha256((root/"dist/xll-python.xll").read_bytes()).hexdigest())
 
 
 if __name__ == "__main__":

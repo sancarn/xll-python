@@ -26,12 +26,13 @@ def digest(path):
 def test(source, action):
     url = "https://api.github.com/repos/sancarn/xll-python/releases/latest"
     release = json.loads(subprocess.check_output(["curl.exe", "--fail", "--silent", "--show-error", url], timeout=30))
-    asset = next(a for a in release["assets"] if a["name"] == "PythonExcel.xll")
+    assets = {a["name"]: a for a in release["assets"]}
+    asset = assets.get("xll-python.xll") or assets["PythonExcel.xll"]
     sha = asset["digest"].removeprefix("sha256:")
     excel = Path(os.environ["ProgramFiles"]) / "Microsoft Office/root/Office16/EXCEL.EXE"
     with tempfile.TemporaryDirectory(dir=ROOT/".build",prefix="restart-") as temp:
         base = Path(temp)
-        target = base/"Python Excel.xll"
+        target = base / ("xll-python.xll" if action == "Save all" else "Python Excel.xll")
         shutil.copyfile(source, target)
         before = digest(target)
         assert sha != before

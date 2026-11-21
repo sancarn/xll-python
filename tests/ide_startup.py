@@ -199,8 +199,8 @@ def main():
             "@function(name='PY.SAVED')\ndef saved(): return VALUE + OFFSET\n")
         book = base / "book.csv"
         book.write_text("test\n")
-        xll = base / "PythonExcel.xll"
-        shutil.copyfile(ROOT / "dist/PythonExcel.xll", xll)
+        xll = base / "xll-python.xll"
+        shutil.copyfile(ROOT / "dist/xll-python.xll", xll)
         proc = subprocess.Popen([excel, "/x", "/automation", book], env=dict(os.environ,
             XLL_PYTHON_HOME=str(base / "profile"), WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="--remote-debugging-port=0"))
         app = None

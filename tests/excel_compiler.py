@@ -105,7 +105,7 @@ def button_icon(hwnd, control):
 
 
 def main():
-    template = ROOT / "dist/PythonExcel.xll"
+    template = ROOT / "dist/xll-python.xll"
     with tempfile.TemporaryDirectory(dir=ROOT/".build", prefix="compiled-test-") as tmp:
         base = Path(tmp)
         build_env = dict(os.environ, PIP_NO_INDEX="1")

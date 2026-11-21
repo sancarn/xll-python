@@ -91,6 +91,46 @@ print(target.Value2)
 
 An active property follows the current Excel window. A saved object continues to refer to its original workbook, sheet or range. `Application.ActiveCell` returns one cell and `Application.Selection` can return a range or another selected object. Use rectangular lists of rows for range transfers. Object references belong to the script run or console session that obtained them. Worksheet formulas cannot use this command API during calculation.
 
+## Call Python from VBA
+
+With the workbench loaded, VBA can get the Python automation object directly. This example uses the bundled scale function and the `show_selection` macro above, saved in a startup file named `reports.py`.
+
+```vb
+Private job As Object
+
+Public Sub RunReport()
+    Dim py As Object
+    Set py = Application.COMAddIns("XllPython.Automation").Object
+    Debug.Print py.CallFunction("XLLPY.scale", Array(21))  ' 42
+    Set job = py.StartMacro("reports.show_selection")
+End Sub
+
+Public Sub ReadReport()
+    If job Is Nothing Then Exit Sub
+    If Not job.Done Then Exit Sub
+    If Len(job.Error) > 0 Then Err.Raise vbObjectError + 1, , job.Error
+    Debug.Print job.Result
+End Sub
+```
+
+Pass positional arguments in a VBA array, or omit the array for a function with no arguments. Trailing arguments use their Python defaults. A VBA range supplies its values or, for a parameter annotated with `Reference`, its sheet and areas. To pass an Excel error, pass the cell containing it. A bare `CVErr` in a VBA array arrives as its numeric COM error code. List results are one-based, two-dimensional Variant arrays.
+
+- **Ordinary functions** return their value directly. **Async functions** return a job. Use `Set` to keep the job and read `Result` once `Done` is true.
+- **Macros** run without arguments. Use the Python module and function name, even when the ribbon label is different. If two startup folders contain the same module and function, use the full source path followed by `!show_selection`. Return control to Excel after starting a macro so Python can read or write cells. A later VBA procedure, for example one scheduled with `Application.OnTime`, can check the job. Workbench macro jobs return captured output. Published macro jobs report completion and errors.
+- **Generators** return a subscription. Use `Set feed = py.CallFunction("XLLPY.live_random")`, read `feed.Value` when `feed.HasValue` is true, and call `feed.Close` when finished. Each call starts an independent subscription. Refreshing startup folders closes existing subscriptions.
+
+For a published XLL, use the COM add-in whose description matches the project's add-in name. Each loaded project exposes its own functions and decorated macros, including macros without ribbon buttons.
+
+```vb
+Dim item As Object, py As Object
+For Each item In Application.COMAddIns
+    If item.Description = "Sales Reports" And item.Connect Then
+        Set py = item.Object
+        Exit For
+    End If
+Next
+```
+
 ## Python console
 
 Choose **Python → Console** to open an interactive session in Excel's embedded interpreter. The console uses the Microsoft Edge WebView2 Runtime and works offline. Installed packages and configured import paths are available in the session.

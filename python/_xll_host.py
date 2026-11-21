@@ -22,6 +22,7 @@ import types
 import typing
 
 from xll_python import ExcelError, Function, Reference
+from _xll_repl import Console
 
 
 _functions = {}
@@ -35,15 +36,19 @@ _debug = None
 class _Output:
     encoding = "utf-8"
 
-    def __init__(self, original):
+    def __init__(self, original, channel):
         self.original = original
+        self.channel = channel
+
+    def destination(self):
+        return getattr(_capture, self.channel, None) or getattr(_capture, "stream", None) or self.original
 
     def write(self, data):
-        stream = getattr(_capture, "stream", None) or self.original
+        stream = self.destination()
         return stream.write(data) if stream is not None else len(data)
 
     def flush(self):
-        stream = getattr(_capture, "stream", None) or self.original
+        stream = self.destination()
         if stream is not None:
             stream.flush()
 
@@ -56,8 +61,9 @@ class _Output:
         raise AttributeError(name)
 
 
-sys.stdout = _Output(sys.stdout)
-sys.stderr = _Output(sys.stderr)
+sys.stdout = _Output(sys.stdout, "stdout")
+sys.stderr = _Output(sys.stderr, "stderr")
+_consoles = {}
 
 
 def _annotation(annotation):
@@ -378,7 +384,20 @@ def dispatch(message):
     try:
         req = json.loads(message)
         op = req["op"]
-        if op == "discover":
+        if op == "repl":
+            session = req["session"]
+            action = req["action"]
+            if action == "open":
+                _consoles[session] = Console(_capture, session)
+                value = None
+            elif action == "close":
+                console = _consoles.pop(session, None)
+                if console:
+                    console.close()
+                value = None
+            else:
+                value = _consoles[session].request(action, req.get("args", {}))
+        elif op == "discover":
             value = _discover(req["folders"], req["packages"], req.get("refresh", False))
         elif op in ("call", "script"):
             value = _execute(op, req)

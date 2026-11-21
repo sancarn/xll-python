@@ -3,7 +3,6 @@ using System.Collections;
 using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using ExcelDna.Integration;
@@ -14,10 +13,7 @@ namespace PythonExcel
 {
     internal sealed class IdeWindow : Form
     {
-        static readonly object lifetime=new object();
-        static IdeWindow current;
-        static Thread thread;
-        static bool loaderConfigured;
+        static readonly WebWindowHost host = new WebWindowHost("Excel Python IDE", () => new IdeWindow());
         readonly WebView2 web=new WebView2{Dock=DockStyle.Fill};
         readonly TextBox output=Ui.ConsoleBox(), formula=new TextBox{Width=300};
         readonly Label file=new Label{AutoSize=true,Margin=new Padding(8,8,4,0)};
@@ -26,34 +22,8 @@ namespace PythonExcel
         string target, lastState;
         bool running;
 
-        internal static void Open()
-        {
-            Runtime.Ensure();
-            lock(lifetime)
-            {
-                if(current!=null && current.IsHandleCreated) { current.BeginInvoke(new Action(current.Activate)); return; }
-                if(thread!=null) return;
-                thread=new Thread(()=> {
-                    try
-                    {
-                        using(var window=new IdeWindow())
-                        {
-                            lock(lifetime) current=window;
-                            Application.Run(window);
-                        }
-                    }
-                    catch(Exception e) { Runtime.Log(e.ToString()); }
-                    finally { lock(lifetime) { current=null; thread=null; } }
-                }) { IsBackground=true,Name="Excel Python IDE" };
-                thread.SetApartmentState(ApartmentState.STA); thread.Start();
-            }
-        }
-
-        internal static void Shutdown()
-        {
-            lock(lifetime)
-                if(current!=null && current.IsHandleCreated) current.BeginInvoke(new Action(current.Close));
-        }
+        internal static void Open() => host.Open();
+        internal static void Shutdown() => host.Shutdown();
 
         IdeWindow()
         {
@@ -167,12 +137,7 @@ namespace PythonExcel
         {
             try
             {
-                if(!loaderConfigured)
-                {
-                    CoreWebView2Environment.SetLoaderDllFolderPath(Runtime.Support);
-                    loaderConfigured=true;
-                }
-                web.CreationProperties=new CoreWebView2CreationProperties{UserDataFolder=Path.Combine(Runtime.Root,"WebView2")};
+                WebWindowHost.Configure(web, "WebView2");
                 await web.EnsureCoreWebView2Async();
                 web.CoreWebView2.WebMessageReceived+=FileRequest;
                 await web.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(TrackSelection);

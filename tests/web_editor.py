@@ -1,20 +1,23 @@
-"""Exercise the real vscode.dev editor using only the disposable WebView2 profile."""
+"""Exercise the add-in's WebView2 pages using the smoke driver's disposable profiles."""
 import json
-from pathlib import Path
+from contextlib import contextmanager
 import urllib.request
 
 import websocket
 from excel_smoke import wait_for
 
 
-def verify_editor(ide, script, read_console, action, pick_file):
-    base=script.parent
-    def port_file():
-        return next((base/"profile"/"WebView2").rglob("DevToolsActivePort"),None)
-    port=int(wait_for(port_file).read_text().splitlines()[0])
+@contextmanager
+def page(profile, url):
     def target():
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/list",timeout=3) as r:
-            return next((t for t in json.load(r) if t["type"]=="page" and t["url"].startswith("https://vscode.dev/")),None)
+        path = next(profile.rglob("DevToolsActivePort"), None)
+        if path:
+            try:
+                port = int(path.read_text().splitlines()[0])
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/list",timeout=3) as r:
+                    return next((t for t in json.load(r) if t["type"]=="page" and t["url"].startswith(url)),None)
+            except (OSError, ValueError, IndexError):
+                return None
     endpoint=wait_for(target)["webSocketDebuggerUrl"]
     ws=websocket.create_connection(endpoint,suppress_origin=True,timeout=10)
     seq=0
@@ -29,7 +32,78 @@ def verify_editor(ide, script, read_console, action, pick_file):
                     raise RuntimeError(msg["error"])
                 return msg["result"]
     def js(expression):
-        return send("Runtime.evaluate",expression=expression,returnByValue=True)["result"].get("value")
+        result=send("Runtime.evaluate",expression=expression,returnByValue=True)
+        if "exceptionDetails" in result:
+            raise RuntimeError(result["exceptionDetails"])
+        return result["result"].get("value")
+    try:
+        yield js, send
+    finally:
+        ws.close()
+
+
+def verify_console(base, pid):
+    with page(base/"profile"/"ConsoleWebView2","https://python-console.example/") as (js, send):
+        wait_for(lambda: js("!!document.querySelector('#source')"))
+        def type_code(code):
+            js("source.focus(); source.select()")
+            send("Input.insertText",text=code)
+        def run_code(code):
+            type_code(code)
+            js("run.click()")
+            wait_for(lambda: js("!run.disabled"))
+        def rendered(selector):
+            return js(f"document.querySelector({json.dumps(selector)})?.textContent ?? ''")
+        run_code("import os, sys, time\nrecord = {'values': [os.getpid()]}\nprint(record)")
+        js("document.querySelector('.inspect').click()")
+        wait_for(lambda: rendered(".children .inspect"))
+        js("document.querySelector('.children .inspect').click()")
+        wait_for(lambda: str(pid) in rendered(".children .children"))
+        type_code("print('first', flush=True)\ntime.sleep(1.5)\nprint('second', file=sys.stderr)\nrecord")
+        assert js("highlight.querySelectorAll('.str').length") == 2
+        js("run.click()")
+        wait_for(lambda: js("run.disabled && transcript.lastChild.querySelector('.output').innerText.includes('first')"))
+        wait_for(lambda: js("!run.disabled"))
+        assert "second" in rendered(".entry:last-child .error")
+        assert "dict" in rendered(".entry:last-child .result")
+        type_code("record.it")
+        wait_for(lambda: rendered("#suggestions [role=option]") == "items")
+        send("Input.dispatchKeyEvent", type="keyDown", key="Tab", code="Tab", windowsVirtualKeyCode=9)
+        assert js("source.value") == "record.items"
+        run_code("if True:")
+        assert js("source.value").endswith("\n    ")
+        run_code("raise ValueError('console test')")
+        assert "ValueError: console test" in rendered(".entry:last-child .error")
+        js("clear.click()")
+        wait_for(lambda: js("transcript.childElementCount === 0"))
+        run_code("record['values'][0]")
+        assert rendered(".result") == str(pid)
+        marker = base / "finished-after-close"
+        type_code(f"from pathlib import Path\nprint('started')\ntime.sleep(2)\nPath({str(marker)!r}).touch()")
+        js("run.click()")
+        wait_for(lambda: rendered(".entry:last-child .output").startswith("started"))
+        print("PASS: ribbon console executes in Excel, streams output, expands nested objects, highlights, completes and retains variables", flush=True)
+
+
+def verify_reopened_console(base):
+    with page(base/"profile"/"ConsoleWebView2","https://python-console.example/") as (js, send):
+        wait_for(lambda: js("!!document.querySelector('#source')"))
+        assert js("transcript.childElementCount") == 0
+        js("source.focus()")
+        send("Input.insertText", text="'record' in globals()")
+        js("run.click()")
+        wait_for(lambda: js("transcript.querySelector('.result')?.textContent === 'False'"))
+        wait_for(lambda: (base / "finished-after-close").exists())
+        print("PASS: closing an active console lets its command finish and reopening starts a fresh session", flush=True)
+
+
+def verify_editor(ide, script, read_console, action, pick_file):
+    base=script.parent
+    with page(base/"profile"/"WebView2","https://vscode.dev/") as (js, send):
+        _exercise_editor(ide, base, read_console, action, pick_file, js, send)
+
+
+def _exercise_editor(ide, base, read_console, action, pick_file, js, send):
     def shortcut(key):
         vk=ord(key.upper())
         for typ in ("keyDown","keyUp"):
@@ -65,6 +139,4 @@ def verify_editor(ide, script, read_console, action, pick_file):
     except Exception:
         print("Editor state:",js("document.body.innerText.slice(-1800)"),flush=True)
         raise
-    finally:
-        ws.close()
 

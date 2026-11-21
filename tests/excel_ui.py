@@ -57,9 +57,21 @@ def verify(app, pid, base, home):
     def read_console(w):
         edits=[e for e in w.descendants(control_type="Edit") if e.element_info.class_name.startswith("WindowsForms10.EDIT")]
         return max((e.get_value() for e in edits),key=len,default="")
-    for label in ("Run Script","Package Installer","Startup Folders","Open IDE","Check for Updates"):
+    for label in ("Run Script","Package Installer","Startup Folders","Open IDE","Check for Updates","Console"):
         button(label)
-    print("PASS: Python ribbon tab and five actionable buttons",flush=True)
+    print("PASS: Python ribbon tab and six actionable buttons",flush=True)
+    click_ribbon("Console")
+    console = window("Python Console")
+    if os.environ.get("XLL_WEB_TEST"):
+        from web_editor import verify_console, verify_reopened_console
+        verify_console(base, pid)
+    close(console)
+    if os.environ.get("XLL_WEB_TEST"):
+        wait_for(lambda: not hwnd_for("Python Console"))
+        click_ribbon("Console")
+        console = window("Python Console")
+        verify_reopened_console(base)
+        close(console)
 
     click_ribbon("Startup Folders")
     folders=window("Python startup folders")

@@ -17,6 +17,7 @@ namespace PythonExcel
   <ribbon><tabs><tab id='xllPythonTab' label='Python'>
     <group id='xllPythonRun' label='Python'>
       <button id='xllPythonScript' label='Run Script' size='large' imageMso='MacroPlay' onAction='RunScript'/>
+      <button id='xllPythonConsole' label='Console' size='large' imageMso='MacroPlay' onAction='OpenConsole'/>
       <button id='xllPythonIde' label='Open IDE' size='large' imageMso='VisualBasic' onAction='OpenIde'/>
     </group>
     <group id='xllPythonSetup' label='Environment'>
@@ -53,6 +54,7 @@ namespace PythonExcel
         });
 
         public void OpenIde(IRibbonControl control) => Guard(IdeWindow.Open);
+        public void OpenConsole(IRibbonControl control) => Guard(ConsoleWindow.Open);
         public void CheckUpdates(IRibbonControl control) => Guard(Updates.Check);
 
         public void RunScript(IRibbonControl control) => Guard(() =>

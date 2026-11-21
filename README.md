@@ -45,6 +45,21 @@ Enter `=XLLPY.scale(21)` for **42**. With `=XLLPY.delayed(123,5)`, Excel display
 - Ranges arrive as lists of rows. A rectangular return value spills in dynamic-array Excel. A flat list returns a column. Annotating a parameter with `xll_python.Reference` requests its sheet identifier and zero-based area coordinates. Date annotations use OLE Automation serial dates.
 - On **Startup Folders → Package links**, add existing `site-packages` directories or package parent folders. Native extensions need a Windows x64 CPython 3.13-compatible ABI. To export functions defined in an installed package, import them in a startup file and list the decorated functions in `__excel_exports__`, for example `from mypackage import price` followed by `__excel_exports__ = [price]`.
 
+## Python console
+
+Choose **Python → Console** to open an interactive session in Excel's embedded interpreter. The console uses the Microsoft Edge WebView2 Runtime and works offline. Installed packages and configured import paths are available in the session.
+
+```python
+sales = {"North": {"units": [12, 18]}, "South": {"units": [9]}}
+print("Sales by region", sales)
+```
+
+Expand the dictionary beside **Sales by region**, then expand a region and its list. Entering `sales` by itself also produces an expandable result. The inspector reads live objects when you expand them and pages through large collections. Standard output, standard error and tracebacks from commands appear in the transcript as they run.
+
+Press **Enter** to run a command or **Shift+Enter** to insert a line. Incomplete statements continue on the next line. Type a name or a dot to see completions, or press **Ctrl+Space** to request them. Use the arrow keys and **Tab** to choose a suggestion. With suggestions closed, **Up** and **Down** recall previous commands.
+
+Variables persist while the console window is open. **Clear output** clears the transcript and releases inspector references while keeping your variables. Reopening a closed window starts a fresh session. If you close the window during a command, that command can finish in the background.
+
 ## VS Code web IDE
 
 **Open IDE** hosts the live **vscode.dev** editor in WebView2. This feature needs internet access to the editor and the Microsoft Edge WebView2 Runtime. The interpreter, worksheet registration, script runner and pip bootstrap work independently of the editor.

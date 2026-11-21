@@ -25,7 +25,7 @@ namespace PythonExcel
             }
         }
 
-        public void AutoClose() { IdeWindow.Shutdown(); }
+        public void AutoClose() { ConsoleWindow.Shutdown(); IdeWindow.Shutdown(); }
     }
 
     internal static class Functions

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>Python Console</title>
+  <link rel="stylesheet" href="console.css">
+  <script src="console.js" defer></script>
+</head>
+<body>
+  <header><h1>Transcript</h1><button id="clear">Clear output</button></header>
+  <main id="transcript" aria-label="Command transcript" tabindex="0"></main>
+  <section aria-label="Console input">
+    <div id="editor">
+      <span class="prompt" aria-hidden="true">&gt;&gt;&gt;</span>
+      <div class="layers">
+        <pre id="highlight" aria-hidden="true"></pre>
+        <textarea id="source" aria-label="Python command" spellcheck="false" autocapitalize="off" autocomplete="off" autofocus></textarea>
+      </div>
+    </div>
+    <div id="suggestions" role="listbox" aria-label="Completions" hidden></div>
+    <footer><span id="status" role="status">Shift+Enter for a new line · Ctrl+Space to complete</span><button id="run">Run ↵</button></footer>
+  </section>
+</body>
+</html>

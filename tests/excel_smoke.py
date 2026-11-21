@@ -84,9 +84,9 @@ def main():
             assert "Loaded 6 Python worksheet functions." in log, log
             book=app.ActiveWorkbook
             sheet=book.Worksheets(1)
-            sheet.Range("B1").Formula2 = "=PY.SCALE(21)"
+            sheet.Range("B1").Formula2 = "=XLLPY.scale(21)"
             assert sheet.Range("B1").Value2 == 42, sheet.Range("B1").Text
-            sheet.Range("B2").Formula2 = "=PY.SCALE(5,3)"
+            sheet.Range("B2").Formula2 = "=XLLPY.scale(5,3)"
             assert sheet.Range("B2").Value2 == 15
             sheet.Range("E1").Formula2 = "=PY.PROBE()"
             assert sheet.Range("E1").Value2 == proc.pid, sheet.Range("E1").Text
@@ -95,13 +95,13 @@ def main():
             assert home.parent == profile and (home/"libs/python313.lib").exists()
             assert sheet.Range("E4").Value2
             sheet.Range("A4:B5").Value2 = ((1,2),(3,4))
-            sheet.Range("G1").Formula2 = "=PY.TRANSPOSE(A4:B5)"
+            sheet.Range("G1").Formula2 = "=XLLPY.transpose(A4:B5)"
             assert sheet.Range("G1:H2").Value2 == ((1.,3.),(2.,4.)), sheet.Range("G1").Text
             sheet.Range("K1").Formula2 = "=PY.ADDRESS(A4:B5)"
             assert sheet.Range("K1:K4").Value2 == ((3.,),(4.,),(0.,),(1.,)), sheet.Range("K1").Text
-            sheet.Range("C1").Formula2 = "=PY.DELAYED(123,3)"
+            sheet.Range("C1").Formula2 = "=XLLPY.delayed(123,3)"
             assert sheet.Range("C1").Value2 == "Waiting…", sheet.Range("C1").Text
-            sheet.Range("D1").Formula2 = "=PY.SCALE(4)"
+            sheet.Range("D1").Formula2 = "=XLLPY.scale(4)"
             assert sheet.Range("D1").Value2 == 8 and sheet.Range("C1").Value2 == "Waiting…"
             sheet.Range("D2").Formula2 = "=IF(ISNUMBER(C1),C1+1,0)"
             wait_for(lambda: sheet.Range("C1").Value2 == 123)
@@ -110,7 +110,7 @@ def main():
             assert sheet.Range("J1").Text == "#VALUE!"
             assert "traceback sentinel" in (profile/"python-excel.log").read_text(encoding="utf-8-sig")
             another=app.Workbooks.Add()
-            another.Worksheets(1).Range("A1").Formula2 = "=PY.SCALE(7)"
+            another.Worksheets(1).Range("A1").Formula2 = "=XLLPY.scale(7)"
             assert another.Worksheets(1).Range("A1").Value2 == 14
             another.Close(False)
             print("PASS: fresh single-XLL load, native CPython in EXCEL.EXE, pip, Tk, SSL, SQLite, package link, two workbooks, defaults, spills, nonblocking async and dependent recalculation.",flush=True)

@@ -151,18 +151,18 @@ def verify(app, pid, base, home):
     wait_for(lambda:"FROM_XLL 43" in read_console(ide))
     edit=next(e for e in ide.descendants(control_type="Edit") if not e.iface_value.CurrentIsReadOnly
               and e.element_info.class_name.startswith("WindowsForms10.EDIT"))
-    edit.set_edit_text("=PY.SCALE(11)")
+    edit.set_edit_text("=XLLPY.scale(11)")
     action("Evaluate")
-    wait_for(lambda:"=PY.SCALE(11) = 22" in read_console(ide))
+    wait_for(lambda:"=XLLPY.scale(11) = 22" in read_console(ide))
     print("PASS: IDE breakpoint, locals, step, resume, run and Excel formula evaluation",flush=True)
     threading.Thread(target=choose,daemon=True).start()
     pick_file(Path(__file__).resolve().parents[1]/"examples/functions.py")
     action("Arm breakpoint")
-    edit.set_edit_text("=PY.SCALE(19)")
+    edit.set_edit_text("=XLLPY.scale(19)")
     action("Evaluate")
     wait_for(lambda:"scale line" in read_console(ide) and '"value":"19.0"' in read_console(ide))
     action("Continue")
-    wait_for(lambda:"=PY.SCALE(19) = 38" in read_console(ide))
+    wait_for(lambda:"=XLLPY.scale(19) = 38" in read_console(ide))
     print("PASS: paused a live registered worksheet function, inspected its arguments and returned its result to Excel",flush=True)
     if os.environ.get("XLL_WEB_TEST"):
         from web_editor import verify_editor

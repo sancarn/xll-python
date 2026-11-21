@@ -27,17 +27,17 @@ import asyncio
 from typing import Annotated
 from xll_python import Function, function
 
-@function(name="PY.SCALE", category="Finance", thread_safe=True)
+@function(name="XLLPY.scale", category="Finance", thread_safe=True)
 def scale(value: Annotated[float, "Number to scale"], factor: float = 2) -> float:
     """Multiply a number by a scale factor."""
     return value * factor
 
-async def delayed(value: float, seconds: float = 2) -> Annotated[float, Function(name="PY.DELAYED")]:
+async def delayed(value: float, seconds: float = 2) -> Annotated[float, Function(name="XLLPY.delayed")]:
     await asyncio.sleep(seconds)
     return value
 ```
 
-Enter `=PY.SCALE(21)` for **42**. With `=PY.DELAYED(123,5)`, Excel displays **Waiting…** while Python waits five seconds on a background thread. You can edit other cells during the wait. Excel receives the result through real-time data (RTD) and updates the cell to **123** along with its dependent formulas. A regular `def` runs synchronously by default. Use `asynchronous=True` to offload a blocking regular function. Decorators and `Annotated` return metadata accept the same registration options.
+Enter `=XLLPY.scale(21)` for **42**. With `=XLLPY.delayed(123,5)`, Excel displays **Waiting…** while Python waits five seconds on a background thread. You can edit other cells during the wait. Excel receives the result through real-time data (RTD) and updates the cell to **123** along with its dependent formulas. A regular `def` runs synchronously by default. Use `asynchronous=True` to offload a blocking regular function. Decorators and `Annotated` return metadata accept the same registration options.
 
 - `name`, `category`, `description` and `help_topic` control registration and Function Wizard metadata. The docstring supplies the default description. An `Annotated` parameter can supply its argument description.
 - `volatile`, `thread_safe`, `macro_type`, `hidden` and `cluster_safe` expose Excel registration flags. Use flags that match the implementation. A cluster worker would also need the add-in, functions and their dependencies.
@@ -52,7 +52,7 @@ Enter `=PY.SCALE(21)` for **42**. With `=PY.DELAYED(123,5)`, Excel displays **Wa
 1. Use VS Code’s **File → Open File** to select a local Python file. The native toolbar displays the selected path. If you opened a folder or switched editor tabs, use **Choose script** to select the execution target shown in the toolbar.
 2. Edit and **save** in VS Code, then choose **Run saved script**. The output pane shows the result from Excel’s embedded interpreter.
 3. To debug a script or worksheet function, choose its source file, set a **Breakpoint line**, and select **Arm breakpoint**. Use line **0** to pause on its first executable line. Run the script, evaluate a registered function, or recalculate its worksheet cell. The debugger shows the source line and local variables. Use **Step**, **Continue** or **Detach**. Closing the IDE releases a paused call.
-4. Enter an expression such as `=PY.SCALE(11)` in **Excel formula** and select **Evaluate**. Excel evaluates it in the active workbook. The IDE displays the result without writing to a cell. Use **Startup Folders → Refresh** to reload changes to startup function definitions.
+4. Enter an expression such as `=XLLPY.scale(11)` in **Excel formula** and select **Evaluate**. Excel evaluates it in the active workbook. The IDE displays the result without writing to a cell. Use **Startup Folders → Refresh** to reload changes to startup function definitions.
 
 The debugger controls belong to the XLL’s IDE window. They can inspect the live interpreter even when a synchronous worksheet call has paused Excel’s calculation thread.
 

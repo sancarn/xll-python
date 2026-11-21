@@ -14,11 +14,13 @@ using System.Web.Script.Serialization;
 
 namespace PythonExcel
 {
+#if !RUNTIME_ONLY
     internal sealed class Settings
     {
         public string[] folders { get; set; } = new string[0];
         public string[] packages { get; set; } = new string[0];
     }
+#endif
 
     internal static class Runtime
     {
@@ -26,15 +28,17 @@ namespace PythonExcel
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "XllPython"));
         internal static string Home, Support;
         internal static string Python => Path.Combine(Home, "python.exe");
-        internal static string SettingsPath => Path.Combine(Root, "settings.json");
         internal static JavaScriptSerializer Json => new JavaScriptSerializer { MaxJsonLength = int.MaxValue, RecursionLimit = 128 };
         private static readonly object logLock = new object();
+#if !RUNTIME_ONLY
+        internal static string SettingsPath => Path.Combine(Root, "settings.json");
         private static readonly object initLock = new object();
         private static Call invoke;
         private static Free free;
 
         [DllImport("kernel32", CharSet = CharSet.Unicode, SetLastError = true)]
         static extern IntPtr LoadLibraryEx(string path, IntPtr reserved, uint flags);
+#endif
         [DllImport("kernel32", CharSet = CharSet.Unicode)]
         static extern IntPtr GetModuleHandle(string name);
         [DllImport("kernel32", CharSet = CharSet.Unicode, SetLastError = true)]
@@ -45,6 +49,7 @@ namespace PythonExcel
         static extern int SizeofResource(IntPtr module, IntPtr resource);
         [DllImport("kernel32")]
         static extern IntPtr LockResource(IntPtr resource);
+#if !RUNTIME_ONLY
         [DllImport("kernel32", CharSet = CharSet.Unicode)]
         static extern uint GetModuleFileName(IntPtr handle, StringBuilder path, int size);
         [DllImport("kernel32", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
@@ -62,6 +67,7 @@ namespace PythonExcel
             if (addr == IntPtr.Zero) throw new Win32Exception();
             return Marshal.GetDelegateForFunctionPointer(addr, typeof(T)) as T;
         }
+#endif
 
         internal static void Log(string message)
         {
@@ -77,6 +83,7 @@ namespace PythonExcel
             catch (IOException) { Trace.WriteLine(message); }
         }
 
+#if !RUNTIME_ONLY
         internal static Settings LoadSettings()
         {
             return File.Exists(SettingsPath) ? Json.Deserialize<Settings>(File.ReadAllText(SettingsPath)) : new Settings();
@@ -154,6 +161,7 @@ namespace PythonExcel
             }
             finally { if (File.Exists(temp)) File.Delete(temp); }
         }
+#endif
 
         internal static byte[] Resource(string name, bool optional = false)
         {
@@ -224,6 +232,7 @@ namespace PythonExcel
             return info;
         }
 
+#if !RUNTIME_ONLY
         internal static string InstallIde()
         {
             string hash;
@@ -236,6 +245,7 @@ namespace PythonExcel
                 finally { mutex.ReleaseMutex(); }
             }
         }
+#endif
 
         internal static void Install(bool bootstrapPip = true)
         {
@@ -250,6 +260,7 @@ namespace PythonExcel
                 {
                     Home = Unpack("runtime", versions[0].Trim());
                     Support = Unpack("support", versions[1].Trim());
+#if !RUNTIME_ONLY
                     if (!bootstrapPip) return;
                     string ready = Path.Combine(Home, ".pip-ready");
                     if (!File.Exists(ready) || !File.Exists(Path.Combine(Home, "Lib", "site-packages", "pip", "__main__.py")))
@@ -264,11 +275,15 @@ namespace PythonExcel
                         }
                         File.WriteAllText(ready, "OK");
                     }
+#endif
                 }
                 finally { mutex.ReleaseMutex(); }
             }
         }
 
+#if RUNTIME_ONLY
+        internal static object Request(object message) => Published.Current.Request(message);
+#else
         static IntPtr Load(string path)
         {
             var lib = LoadLibraryEx(path, IntPtr.Zero, 0x1100); // DLL's own directory and safe default directories
@@ -318,6 +333,7 @@ namespace PythonExcel
             if (decoded.ContainsKey("failure")) throw new InvalidOperationException((string)decoded["failure"]);
             return decoded["value"];
         }
+#endif
     }
 }
 

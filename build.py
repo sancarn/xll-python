@@ -38,24 +38,27 @@ def prepare(item):
     return archive
 
 
-def payload(inputs):
-    runtime = BUILD / "runtime.zip"
+def payload(inputs, published=False):
+    archive_name = "published-runtime" if published else "runtime"
+    inputs = [p for p in inputs if p.suffix == ".msi" and
+              (not published or p.name not in ("dev.msi", "test.msi"))]
+    runtime = BUILD / (archive_name + ".zip")
     # Regenerate if any pinned input changes. Reuse identical bytes between host-only builds.
-    identity = sha256(json.dumps({k:v for k,v in INPUTS.items() if k.endswith(".msi")}, sort_keys=True).encode()).hexdigest()
-    stamp = BUILD / "runtime-inputs"
+    identity = sha256(json.dumps({p.name: INPUTS[p.name] for p in inputs}, sort_keys=True).encode()).hexdigest()
+    stamp = BUILD / (archive_name + "-inputs")
     if runtime.exists() and stamp.exists() and stamp.read_text() == identity:
         return runtime
     with zipfile.ZipFile(runtime, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
         seen = set()
         for msi in inputs:
-            if msi.suffix != ".msi":
-                continue
             stage = BUILD / "msi" / msi.stem
             stage.mkdir(parents=True, exist_ok=True)
             run("msiexec", "/a", msi, "/qn", "TARGETDIR=" + str(stage))
             for f in sorted(stage.rglob("*")):
                 if f.is_file() and f.suffix != ".msi":
                     name = f.relative_to(stage).as_posix()
+                    if published and name.lower().startswith(("include/", "libs/")):
+                        continue
                     if name not in seen:
                         archive.write(f, name)
                         seen.add(name)
@@ -84,6 +87,22 @@ def embed_archive(xll, name, archive):
         raise error
     if not end(handle, False):
         raise ctypes.WinError(ctypes.get_last_error())
+
+
+def pack(vs, out, name, dna, runtime, resources=()):
+    shutil.copy2(dna, out / (name + ".dna"))
+    shutil.copy2(DNA / "ExcelDna64.xll", out / (name + ".xll"))
+    run(vs / "MSBuild/Current/Bin/MSBuild.exe", ROOT / "addin/pack.proj",
+        "/nologo", "/verbosity:minimal", "/p:AddInName=" + name)
+    packed = out / (name + "-packed.xll")
+    embed_archive(packed, "PYTHON_RUNTIME", runtime)
+    for key, file in resources:
+        embed_archive(packed, key, file)
+    DIST.mkdir(exist_ok=True)
+    artifact = DIST / (name + ".xll")
+    os.replace(packed, artifact)
+    print(artifact)
+    return artifact
 
 
 def main():
@@ -152,17 +171,26 @@ def main():
         ROOT/"updater/RestartPlan.cs", *sorted((ROOT/"addin").glob("*.cs")))
     for f in web_dlls:
         shutil.copy2(f,out/f.name)
-    shutil.copy2(ROOT/"addin/PythonExcel.dna",out/"PythonExcel.dna")
-    shutil.copy2(DNA/"ExcelDna64.xll",out/"PythonExcel.xll")
-    DIST.mkdir(exist_ok=True)
-    run(vs/"MSBuild/Current/Bin/MSBuild.exe", ROOT/"addin/pack.proj", "/nologo", "/verbosity:minimal")
-    artifact = DIST / "PythonExcel.xll"
-    embed_archive(out/"PythonExcel-packed.xll", "PYTHON_RUNTIME", runtime)
-    embed_archive(out/"PythonExcel-packed.xll", "EXCEL_IDE", ide)
-    os.replace(out/"PythonExcel-packed.xll", artifact)
-    print(artifact)
+    lean_runtime = payload(archives, published=True)
+    lean_support = out / "published-support.zip"
+    with zipfile.ZipFile(lean_support, "w", zipfile.ZIP_DEFLATED) as z:
+        for module in ("_xll_worker", "_xll_functions", "_xll_application", "_xll_streams", "xll_python"):
+            z.write(ROOT / "python" / (module + ".py"), module + ".py")
+        for name in ("LICENSE", "LICENSE-PACKAGE-EXCEPTIONS.txt", "notices/Excel-DNA.txt", "notices/Third-party-sources.md"):
+            z.write(ROOT / name, name)
+    lean_versions = out / "published-versions.txt"
+    lean_versions.write_text("\n".join(sha256(p.read_bytes()).hexdigest() for p in (lean_runtime, lean_support)))
+    run(csc, "/nologo", "/target:library", "/optimize+", "/platform:x64", "/define:RUNTIME_ONLY",
+        "/out:" + str(out / "PythonExcelRuntime.dll"), *("/r:" + x for x in refs),
+        "/r:" + str(DNA / "ExcelDna.Integration.dll"),
+        "/resource:" + str(lean_support) + ",support.zip", "/resource:" + str(lean_versions) + ",versions.txt",
+        ROOT / "addin/runtime/Ribbon.cs", *(ROOT / "addin" / (name + ".cs") for name in
+        ("Runtime", "Published", "Functions", "ExcelObjects", "LiveFunction", "ProcessJob")))
+    template = pack(vs, out, "PythonExcelRuntime", ROOT / "addin/runtime/PythonExcelRuntime.dna", lean_runtime)
+    pin = out / "runtime-template.json"
+    pin.write_text(json.dumps(dict(tag=release, sha256=sha256(template.read_bytes()).hexdigest())), encoding="ascii")
+    pack(vs, out, "PythonExcel", ROOT / "addin/PythonExcel.dna", runtime, [("EXCEL_IDE", ide), ("RUNTIME_TEMPLATE", pin)])
 
 
 if __name__ == "__main__":
     main()
-

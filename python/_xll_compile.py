@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.request
 import uuid
 import xml.etree.ElementTree as ET
 import zipfile
@@ -42,7 +43,7 @@ def command_names(root, entries):
     return sorted(set(names))
 
 
-def packed_dna(template, name):
+def resource_bytes(template, name, kind):
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     def api(symbol, result, *args):
         fn = getattr(kernel, symbol)
@@ -53,21 +54,63 @@ def packed_dna(template, name):
     if not module:
         raise ctypes.WinError(ctypes.get_last_error())
     try:
-        entry = api("FindResourceW", handle, handle, string, string)(module, "__MAIN__", "DNA")
+        entry = api("FindResourceW", handle, handle, string, string)(module, name, kind)
         if not entry:
-            raise ValueError("The template is missing its Excel-DNA manifest")
+            raise ValueError(f"The template is missing its {name} resource")
         size = api("SizeofResource", wintypes.DWORD, handle, handle)(module, entry)
         data = api("LoadResource", handle, handle, handle)(module, entry)
         pointer = api("LockResource", ctypes.c_void_p, handle)(data)
         if not pointer:
             raise ctypes.WinError(ctypes.get_last_error())
-        xml = ET.fromstring(ctypes.string_at(pointer, size))
-        # The native Excel-DNA bootstrap scans for an unprefixed DnaLibrary tag.
-        ET.register_namespace("", xml.tag[1:].split("}")[0])
-        xml.set("Name", name)
-        return ET.tostring(xml, encoding="utf-8", xml_declaration=True)
+        return ctypes.string_at(pointer, size)
     finally:
         api("FreeLibrary", wintypes.BOOL, handle)(module)
+
+
+def packed_dna(template, name):
+    xml = ET.fromstring(resource_bytes(template, "__MAIN__", "DNA"))
+    # The native Excel-DNA bootstrap scans for an unprefixed DnaLibrary tag.
+    ET.register_namespace("", xml.tag[1:].split("}")[0])
+    xml.set("Name", name)
+    return ET.tostring(xml, encoding="utf-8", xml_declaration=True)
+
+
+def optimised_template(workbench, output):
+    pin = json.loads(resource_bytes(workbench, "RUNTIME_TEMPLATE", ctypes.cast(10, wintypes.LPCWSTR)))
+    tag, digest = pin["tag"], pin["sha256"]
+    if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", tag) or not re.fullmatch(r"[a-f0-9]{64}", digest):
+        raise ValueError("Invalid runtime template version or SHA-256 in the workbench")
+    asset = "PythonExcelRuntime.xll"
+    root = Path(os.environ["XLL_PYTHON_HOME"]) if "XLL_PYTHON_HOME" in os.environ else Path(os.environ["LOCALAPPDATA"]) / "XllPython"
+    cache = root / "templates" / tag / digest / asset
+    sibling = workbench.with_name(asset)
+    if output in (cache.resolve(), sibling.resolve()):
+        raise ValueError("Choose an output file separate from the runtime template")
+    for path in (cache, sibling):
+        if path.is_file():
+            data = path.read_bytes()
+            if sha256(data).hexdigest() == digest:
+                return data
+    url = f"https://github.com/sancarn/xll-python/releases/download/{tag}/{asset}"
+    try:
+        with urllib.request.urlopen(url, timeout=90) as response:
+            data = response.read()
+    except OSError as error:
+        raise ValueError(f"Could not download the runtime template for {tag}. "
+                         f"For offline compilation, place the matching {asset} beside {workbench.name}. {error}") from error
+    if sha256(data).hexdigest() != digest:
+        raise ValueError(f"The runtime template for {tag} failed SHA-256 verification")
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=cache.parent) as temp:
+        candidate = Path(temp) / asset
+        candidate.write_bytes(data)
+        try:
+            os.replace(candidate, cache)
+        except PermissionError:
+            # Another compiler may already have published this copy and opened it for reading.
+            if not cache.is_file() or sha256(cache.read_bytes()).hexdigest() != digest:
+                raise
+    return data
 
 
 def resources(target, items):
@@ -133,6 +176,8 @@ def publish(project_file, template, output):
     project_file, template, output = map(lambda p: Path(p).resolve(), (project_file, template, output))
     root = project_file.parent
     project = json.loads(project_file.read_text(encoding="utf-8"))
+    if not isinstance(project.get("optimise", False), bool):
+        raise ValueError("Optimise must be true or false")
     if output == template or output.suffix.lower() != ".xll":
         raise ValueError("Choose a separate .xll output file")
     if not project["entries"] or not project["name"].strip():
@@ -179,9 +224,14 @@ def publish(project_file, template, output):
         info = dict(name=project["name"], id=project["id"], hash=sha256(data).hexdigest(),
                     functions=catalog["functions"], **ui)
         built = Path(temp) / "output.xll"
-        shutil.copyfile(template, built)
-        resources(built, {"PYTHON_PROJECT": data, "PYTHON_MANIFEST": json.dumps(info).encode(),
-                          "__MAIN__": packed_dna(template, project["name"]), "EXCEL_IDE": None})
+        updates = {"PYTHON_PROJECT": data, "PYTHON_MANIFEST": json.dumps(info).encode()}
+        if project.get("optimise", False):
+            built.write_bytes(optimised_template(template, output))
+        else:
+            shutil.copyfile(template, built)
+            updates["EXCEL_IDE"] = None
+        updates["__MAIN__"] = packed_dna(built, project["name"])
+        resources(built, updates)
         os.replace(built, output)
 
 

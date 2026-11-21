@@ -36,6 +36,8 @@ def source_files(root, manifest):
 def read_project(path):
     project = json.loads(path.read_text(encoding="utf-8-sig"))
     uuid.UUID(project["id"])
+    if not isinstance(project.get("optimise", False), bool):
+        raise ValueError("Optimise must be true or false")
     if not isinstance(project["name"], str):
         raise ValueError("Expected an add-in name in the project file.")
     for key in ("entries", "files", "packages", "tabs"):

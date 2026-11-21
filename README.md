@@ -124,11 +124,13 @@ On **Ribbon**, add a tab, a group, and a button. Select each in the preview to e
 
 On **Packages**, choose **Include** beside an installed distribution to record its exact version. You can also add a package by name or version, or include a local wheel. Compilation uses pip to resolve dependencies into a clean staging directory. Packages need wheels compatible with the bundled Windows x64 interpreter. Local wheel directories are also searched for dependencies. Keep external wheels at their selected paths when rebuilding, or put the wheelhouse inside the project for a portable project file. Network access may be needed at build time.
 
+Select **Optimise** on **Project Information** to ship the Excel-DNA host, Python worker and interpreter, and your project in a smaller XLL. This option starts unchecked. On the first optimised build, the compiler downloads `PythonExcelRuntime.xll` from the workbench's exact GitHub release, verifies the SHA-256 embedded in the workbench, and caches it locally. For an offline first build, place the matching template beside the workbench XLL. Local source builds produce this pair in `dist`. Package resolution may still need network access. Recipients need only the generated XLL.
+
 Save the project and select **Compile XLL**. Distribute the generated XLL to 64-bit Windows Excel users. It contains your Python source, selected packages and their resolved dependencies, images and interpreter. It runs offline. Excel registers the embedded worksheet signatures and displays the ribbon at load time. The first formula or button starts a persistent Python worker for that add-in. Generated add-ins share extracted copies of identical runtime files while imports and package versions are private to each worker. Each published project version has its own writable working directory, initially populated with its project files. Relative writes persist there without changing the modules imported on reload. Give worksheet functions distinct Excel names across installed add-ins. To update an add-in, rebuild its project and replace the XLL while it is unloaded.
 
 ## Build and verify
 
-Each push to `main` runs a Windows GitHub Actions build. The workflow checks the packaged runtime and restart helper, then publishes the XLL with a versioned tag and SHA-256 digest. Users on v0.1.0 can install the latest release manually once to get the update button.
+Each push to `main` runs a Windows GitHub Actions build. The workflow checks the packaged runtime and restart helper, verifies the runtime-only template, then publishes both assets on one versioned release with their SHA-256 digests. Users on v0.1.0 can install the latest release manually once to get the update button.
 
 On Windows x64, install Python 3.10 or later and Visual Studio Build Tools with desktop C++ tools, their x64 Spectre-mitigated libraries, MSBuild, the C# compiler and .NET Framework 4.8 targeting support. From the repository root run:
 
@@ -136,7 +138,7 @@ On Windows x64, install Python 3.10 or later and Visual Studio Build Tools with 
 python build.py
 ```
 
-The build verifies the SHA-256 of each pinned upstream input in `build-inputs.json`, stages the official CPython MSI payloads without installing Python system-wide, compiles the native embedding bridge and ribbon, and packs `dist\PythonExcel.xll`. Build downloads stay in `.build`. The extracted support directory contains third-party notices, and the runtime contains CPython’s license.
+The build verifies the SHA-256 of each pinned upstream input in `build-inputs.json`, stages the official CPython MSI payloads without installing Python system-wide, compiles the native embedding bridge and ribbon, and packs `dist\PythonExcel.xll` and `dist\PythonExcelRuntime.xll`. Build downloads stay in `.build`. The extracted support directory contains third-party notices, and the runtime contains CPython’s license.
 
 To exercise the finished file in a disposable Excel instance, install `pywin32` in the **test driver’s** Python and run `python tests/excel_smoke.py`. For the ribbon and IDE checks, also install `pywinauto`, `psutil` and `websocket-client`, set `$env:XLL_WEB_TEST = '1'`, and run `python tests/excel_smoke.py --ui`. The UI checks open temporary test windows on the desktop. The driver scopes its workbook, package installs and configuration to a temporary profile via `XLL_PYTHON_HOME`.
 

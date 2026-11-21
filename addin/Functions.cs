@@ -15,9 +15,11 @@ namespace PythonExcel
             try
             {
                 if (Published.Open()) return;
+#if !RUNTIME_ONLY
                 var settings = Runtime.LoadSettings();
                 if (settings.folders.Length != 0 || settings.packages.Length != 0)
                     Functions.Load(settings, false);
+#endif
             }
             catch (Exception e)
             {
@@ -26,7 +28,16 @@ namespace PythonExcel
             }
         }
 
-        public void AutoClose() { LiveFunction.DisconnectAll(); Published.Current?.Dispose(); ConsoleWindow.Shutdown(); PipWindow.Shutdown(); IdeWindow.Shutdown(); }
+        public void AutoClose()
+        {
+            LiveFunction.DisconnectAll();
+            Published.Current?.Dispose();
+#if !RUNTIME_ONLY
+            ConsoleWindow.Shutdown();
+            PipWindow.Shutdown();
+            IdeWindow.Shutdown();
+#endif
+        }
     }
 
     internal static class Functions
@@ -40,6 +51,7 @@ namespace PythonExcel
         static readonly Dictionary<string,Registration> registered = new Dictionary<string,Registration>(StringComparer.OrdinalIgnoreCase);
         static int generation;
 
+#if !RUNTIME_ONLY
         internal static void Load(Settings settings, bool refresh)
         {
             var discovered = (IDictionary)Runtime.Request(new {op="discover", settings.folders, settings.packages, refresh});
@@ -54,6 +66,7 @@ namespace PythonExcel
 
         internal static void ConsoleChanged() =>
             Synchronize((IList)Runtime.Request(new {op="worksheetFunctions"}), true);
+#endif
 
         internal static void Synchronize(IList functions, bool recalculate)
         {

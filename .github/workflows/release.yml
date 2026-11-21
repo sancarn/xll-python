@@ -21,10 +21,13 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
-      - name: Build Windows x64 XLL
+      - name: Build workbench and runtime-only XLLs
         run: python build.py
-      - name: Verify packaged runtime and restart helper
-        run: python tests/verify_package.py
+      - name: Verify both XLLs and template download integrity
+        run: |
+          python tests/verify_package.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/test_template.py
       - name: Publish release for this commit
         env:
           GH_TOKEN: ${{ github.token }}
@@ -37,7 +40,9 @@ jobs:
             $existing = $existing | ConvertFrom-Json
             if ($existing.targetCommitish -ne $env:GITHUB_SHA) { throw "Release tag already has a different target" }
             if (!$existing.isDraft) {
-              if ('PythonExcel.xll' -notin $existing.assets.name) { throw "Published release is missing its XLL" }
+              foreach ($asset in 'PythonExcel.xll', 'PythonExcelRuntime.xll') {
+                if ($asset -notin $existing.assets.name) { throw "Published release is missing $asset" }
+              }
               exit 0
             }
           }
@@ -45,23 +50,26 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Cannot determine the latest published release" }
           $promote = ([version]$tag.Substring(1) -gt [version]$latest.Substring(1)).ToString().ToLowerInvariant()
           $digest = (Get-FileHash dist/PythonExcel.xll -Algorithm SHA256).Hash.ToLowerInvariant()
+          $runtimeDigest = (Get-FileHash dist/PythonExcelRuntime.xll -Algorithm SHA256).Hash.ToLowerInvariant()
           $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
           @(
             'Download **PythonExcel.xll** for 64-bit desktop Excel on Windows.'
+            'Compile to XLL downloads **PythonExcelRuntime.xll** on demand for optimised builds.'
             ''
             "Built from commit $env:GITHUB_SHA."
             "[Download the matching XLL Python source and build scripts](https://github.com/$repo/archive/$($env:GITHUB_SHA).zip)"
             "[Third-party licences and source locations](https://github.com/$repo/blob/$tag/notices/Third-party-sources.md)"
             ''
-            "SHA-256: $digest"
+            "PythonExcel.xll SHA-256: $digest"
+            "PythonExcelRuntime.xll SHA-256: $runtimeDigest"
             ''
             "[Installation and usage](https://github.com/$repo/blob/$tag/README.md)"
           ) | Set-Content -Encoding utf8 $notes
           if ($existing -and $existing.isDraft) {
-            gh release upload $tag dist/PythonExcel.xll --repo $repo --clobber
+            gh release upload $tag dist/PythonExcel.xll dist/PythonExcelRuntime.xll --repo $repo --clobber
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             gh release edit $tag --repo $repo --draft=false "--latest=$promote" --notes-file $notes
           } else {
-            gh release create $tag dist/PythonExcel.xll --repo $repo --target $env:GITHUB_SHA --title "Python for Excel $tag" "--latest=$promote" --notes-file $notes
+            gh release create $tag dist/PythonExcel.xll dist/PythonExcelRuntime.xll --repo $repo --target $env:GITHUB_SHA --title "Python for Excel $tag" "--latest=$promote" --notes-file $notes
           }
           exit $LASTEXITCODE

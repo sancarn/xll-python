@@ -22,7 +22,7 @@
         <h1 id="title">Python for<br>desktop Excel</h1>
         <p>Write a Python function and call it from a cell. XLL Python runs it inside Excel, with a local interpreter, code editor and console.</p>
         <a class="download" href="https://github.com/sancarn/xll-python/releases/latest/download/xll-python.xll"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/></svg>Download the add-in</a>
-        <small>For 64-bit Excel on Windows</small>
+        <small>For 64-bit Excel on Windows. No separate Python installation required.</small>
       </div>
       <div class="demo" aria-label="Forecast worksheet and its Python function">
         <div class="sheet-window">
@@ -47,6 +47,7 @@
         <a href="#console" id="tab-console"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4" width="19" height="16" rx="2"/><path d="m6 9 3 3-3 3m6 0h5"/></svg>Console</a>
         <a href="#packages" id="tab-packages"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 2 9 5v10l-9 5-9-5V7zM3 7l9 5 9-5m-9 5v10M7 4.7l9 5"/></svg>Packages</a>
         <a href="#compiler" id="tab-compiler"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h8v7H3zM13 13h8v7h-8zM15 6h4v4M5 14v4h5"/></svg>XLL compiler</a>
+        <a href="#embedded-runtime" id="tab-embedded-runtime"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2v3m6-3v3M9 19v3m6-3v3M2 9h3m-3 6h3m14-6h3m-3 6h3"/></svg>Embedded Runtime</a>
       </nav>
       <article class="panel" id="worksheet">
         <div class="description"><h3>Call Python from a cell</h3><p>Save the example file in a folder you trust. In <b>Python → Startup Folders</b>, add that folder under <b>Worksheet functions</b> and choose <b>Refresh</b>.</p><p>Open the <a href="assets/Forecast.xlsx" download>starter workbook</a>. In D3, enter <code>=FORECAST.UNITS(B3,C3)</code> to get 1,400. Fill the formula down to D6 for the other regions.</p><a href="assets/forecast.py" download>Download forecast.py</a></div>
@@ -67,6 +68,10 @@
       <article class="panel" id="compiler">
         <div class="description"><h3>Distribute your own add-in</h3><p>Under <b>Python → Compile to XLL</b>, choose <b>New Project</b> and select your source folder. Mark your function file as an entry module and select the packages it needs.</p><p>Choose <b>Compile XLL</b> to bundle the project and interpreter. Colleagues can load the resulting file in 64-bit Windows Excel.</p><a href="https://github.com/sancarn/xll-python#compile-your-own-xll">Compiler guide</a></div>
         <a class="capture" href="assets/compiler.png" aria-label="Open full-size screenshot: XLL compiler"><img src="assets/compiler.png" width="1290" height="690" loading="lazy" alt="Compile to XLL welcome screen with New Project, Open Project and the project folder drop area."></a>
+      </article>
+      <article class="panel" id="embedded-runtime">
+        <div class="description"><h3>Python is included</h3><p>You can use XLL Python even if you’ve never installed Python on your PC. The XLL includes CPython and its standard library.</p><p>The add-in unpacks its interpreter on first use and reuses it each time you open Excel. You can run the forecast example offline.</p><a href="#worksheet">Try the forecast example</a></div>
+        <a class="capture" href="assets/forecast.png" aria-label="Open full-size forecast worksheet"><img src="assets/forecast.png" width="576" height="304" loading="lazy" alt="The forecast worksheet showing the Python function’s result of 1,400 units for the North region."></a>
       </article>
     </section>
 

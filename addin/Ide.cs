@@ -167,7 +167,7 @@ namespace PythonExcel
             if(running || (target==null && !Choose())) return;
             string path=target;
             running=true; Print("Running "+path);
-            try { Print((string)await Task.Run(()=>Runtime.Request(new {op="script",path}))); Print("Finished."); }
+            try { Print(await Task.Run(()=>ExcelObjects.RunScript(path))); Print("Finished."); }
             catch(Exception e){Print(e.Message);}
             finally{running=false;}
         }

@@ -61,6 +61,22 @@ By default, `generator_instances="one"` shares one generator across cells with t
 - Ranges arrive as lists of rows. A rectangular return value spills in dynamic-array Excel. A flat list returns a column. Annotating a parameter with `xll_python.Reference` requests its sheet identifier and zero-based area coordinates. Date annotations use OLE Automation serial dates.
 - On **Startup Folders → Package links**, add existing `site-packages` directories or package parent folders. Native extensions need a Windows x64 CPython 3.13-compatible ABI. To export functions defined in an installed package, import them in a startup file and list the decorated functions in `__excel_exports__`, for example `from mypackage import price` followed by `__excel_exports__ = [price]`.
 
+## Automate Excel from Python
+
+Scripts and console commands can import `Application` from `xll_python`. It addresses the Excel instance running the add-in. Use VBA member names for properties, `Range("A1")` for an address, parentheses for collection items, and `Call("Method", ...)` to invoke a method.
+
+```python
+from xll_python import Application
+
+book = Application.ActiveWorkbook
+sheet = book.Worksheets(1)
+target = sheet.Range("A1:B2")
+target.Value2 = [[1, 2], [3, 4]]
+print(target.Value2)
+```
+
+An active property follows the current Excel window. A saved object continues to refer to its original workbook, sheet or range. `Application.ActiveCell` returns one cell and `Application.Selection` can return a range or another selected object. Use rectangular lists of rows for range transfers. Object references belong to the script run or console session that obtained them. Worksheet formulas cannot use this command API during calculation.
+
 ## Python console
 
 Choose **Python → Console** to open an interactive session in Excel's embedded interpreter. The console uses the Microsoft Edge WebView2 Runtime and works offline. Installed packages and configured import paths are available in the session.

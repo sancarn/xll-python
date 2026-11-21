@@ -22,6 +22,7 @@ import types
 import typing
 
 from xll_python import ExcelError, Function, Reference
+from _xll_application import Session, active
 from _xll_repl import Console
 from _xll_streams import Streams
 
@@ -460,6 +461,7 @@ def dispatch(message):
             action = req["action"]
             if action == "open":
                 _consoles[session] = _worksheet_console = _WorksheetConsole(_capture, session)
+                _worksheet_console.excel = Session(req["excelPipe"]) if req.get("excelPipe") else None
                 value = None
             elif action == "detach":
                 value = False
@@ -471,16 +473,28 @@ def dispatch(message):
                 if _worksheet_console is console:
                     _worksheet_console = None
                 if console:
+                    if console.excel:
+                        console.excel.close()
                     console.close()
                 value = None
             else:
-                value = _consoles[session].request(action, req.get("args", {}))
+                console = _consoles[session]
+                with active(console.excel):
+                    value = console.request(action, req.get("args", {}))
         elif op == "worksheetFunctions":
             value = _worksheet_entries()
         elif op == "discover":
             value = _discover(req["folders"], req["packages"], req.get("refresh", False))
+        elif op == "script" and req.get("excelPipe"):
+            session = Session(req["excelPipe"])
+            try:
+                with active(session):
+                    value = _execute(op, req)
+            finally:
+                session.close()
         elif op in ("call", "script", "streamOpen"):
-            value = _execute(op, req)
+            with active(None):
+                value = _execute(op, req)
         elif op == "streamClose":
             _streams.close(req["id"])
             value = None

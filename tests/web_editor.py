@@ -255,9 +255,8 @@ def verify_editor(base, pid, close):
         wait_for(lambda: {"Reference", "ExcelError"} <= set(body().splitlines()))
         key("Escape", 27)
         key("a", 65, 2)
-        send("Input.insertText", text=source + "if __name__ == '__main__':\n"
-             "    from xll_python import Application\n"
-             "    Application.ActiveSheet.Range('U3').Value2 = 'IDE'\n"
+        send("Input.insertText", text=source + "from xll_python import Application\n"
+             "if __name__ == '__main__': Application.ActiveSheet.Range('U3').Value2 = 'IDE'\n"
              "print('IDE_RUN', __import__('os').getpid())\n")
         key("F5", 116, 2)
         wait_for(lambda: f"IDE_RUN {pid}" in body())

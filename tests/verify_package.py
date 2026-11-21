@@ -37,10 +37,18 @@ def main():
             assert data == source.read_bytes(), name
             if name == "PYTHONEXCEL":
                 assert (root/".build/pack/updater.exe").read_bytes() in data
+                support = root/".build/pack/support.zip"
+                assert support.read_bytes() in data
+                with zipfile.ZipFile(support) as archive:
+                    for path in ("LICENSE", "LICENSE-PACKAGE-EXCEPTIONS.txt", "examples/LICENSE",
+                                 "notices/Excel-DNA.txt", "notices/Theia-LICENSE-EPL",
+                                 "notices/Theia-NOTICE.md", "notices/Third-party-sources.md"):
+                        assert archive.read(path) == (root/path).read_bytes(), path
     finally:
         kernel.FreeLibrary(module)
     with zipfile.ZipFile(root/".build/runtime.zip") as archive:
         assert archive.testzip() is None
+        assert b"PYTHON SOFTWARE FOUNDATION LICENSE" in archive.read("LICENSE.txt")
     print("Verified single-XLL package", hashlib.sha256((root/"dist/PythonExcel.xll").read_bytes()).hexdigest())
 
 

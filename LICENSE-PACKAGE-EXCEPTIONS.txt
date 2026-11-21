@@ -1,0 +1,22 @@
+XLL Python Source-Available Licence, version 1.0
+Permission for independent add-ins
+
+You may develop, compile, use, distribute and sell an independent add-in
+that uses XLL Python, including as a single .xll containing the Framework.
+This permission also covers independently authored worksheet functions,
+scripts and workbooks that use the Framework. You retain the rights you
+hold in your work and may choose its licence, charge any price and keep
+its source private.
+
+An independent add-in supplies its own application functionality through
+code written to use the Framework. For example, you may sell a compiled
+forecasting add-in containing your own calculations and the XLL Python
+runtime. Renaming the Framework, changing its branding, or bundling
+unrelated files with it does not make the Framework an independent add-in.
+
+The terms in LICENSE continue to apply to the embedded Framework and any
+changes you distribute to it. For example, if you change the compiler or
+runtime and ship that change with your forecasting add-in, provide the
+matching Framework source to your recipients. Your forecasting code can
+still be licensed separately. Third-party libraries and other content
+you include remain subject to their own terms.

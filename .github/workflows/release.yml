@@ -50,6 +50,8 @@ jobs:
             'Download **PythonExcel.xll** for 64-bit desktop Excel on Windows.'
             ''
             "Built from commit $env:GITHUB_SHA."
+            "[Download the matching XLL Python source and build scripts](https://github.com/$repo/archive/$($env:GITHUB_SHA).zip)"
+            "[Third-party licences and source locations](https://github.com/$repo/blob/$tag/notices/Third-party-sources.md)"
             ''
             "SHA-256: $digest"
             ''

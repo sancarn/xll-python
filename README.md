@@ -137,3 +137,11 @@ python build.py
 The build verifies the SHA-256 of each pinned upstream input in `build-inputs.json`, stages the official CPython MSI payloads without installing Python system-wide, compiles the native embedding bridge and ribbon, and packs `dist\PythonExcel.xll`. Build downloads stay in `.build`. The extracted support directory contains third-party notices, and the runtime contains CPython’s license.
 
 To exercise the finished file in a disposable Excel instance, install `pywin32` in the **test driver’s** Python and run `python tests/excel_smoke.py`. For the ribbon and IDE checks, also install `pywinauto`, `psutil` and `websocket-client`, set `$env:XLL_WEB_TEST = '1'`, and run `python tests/excel_smoke.py --ui`. The UI checks open temporary test windows on the desktop. The driver scopes its workbook, package installs and configuration to a temporary profile via `XLL_PYTHON_HOME`.
+
+## Licence
+
+XLL Python is source-available. Anyone may use, study, modify and share the framework, including for business use. Copies of the framework itself, including renamed or modified versions, must be distributed free of charge. If you distribute the framework, give each recipient its matching source and build scripts under the same terms. The framework is provided without warranty, with liability limited to the extent permitted by law. [XLL Python licence](LICENSE)
+
+You can sell an add-in that provides your own functionality, even when the compiler packages it with the runtime in a single `.xll`. For example, you can sell a forecasting add-in and choose a proprietary licence for your calculations. Include the framework licences and supply the matching framework source or a download link. If you distribute changes to the runtime, include those changes in that source. [Permission for independent add-ins](LICENSE-PACKAGE-EXCEPTIONS.txt)
+
+You can copy and adapt the example functions and README code snippets under [0BSD](examples/LICENSE). The bundled third-party components retain their own licences. [Third-party notices and source locations](notices/Third-party-sources.md)

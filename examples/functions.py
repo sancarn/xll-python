@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: 0BSD
 import asyncio
 import random
 import time

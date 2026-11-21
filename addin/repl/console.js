@@ -173,6 +173,8 @@ async function execute() {
       source.setSelectionRange(code.length, code.length);
       newline();
     } else {
+      for (const formula of result.worksheetFormulas || [])
+        output.append(element("div", "", "Worksheet formula: " + formula));
       if (history.at(-1) !== code) history.push(code);
       if (history.length > 200) history.shift();
       if (transcript.childElementCount > 200) transcript.firstChild.remove();

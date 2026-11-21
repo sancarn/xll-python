@@ -3,6 +3,7 @@ import io
 import json
 from pathlib import Path
 import sys
+import tempfile
 import threading
 import unittest
 
@@ -11,10 +12,13 @@ from _xll_host import dispatch
 
 
 class ConsoleTest(unittest.TestCase):
-    def call(self, action, **args):
-        reply = json.loads(dispatch(json.dumps(dict(op="repl", session="test", action=action, args=args))))
+    def host(self, op, **args):
+        reply = json.loads(dispatch(json.dumps(dict(op=op, **args))))
         self.assertNotIn("failure", reply)
         return reply["value"]
+
+    def call(self, action, **args):
+        return self.host("repl", session="test", action=action, args=args)
 
     def setUp(self):
         self.call("open")
@@ -30,6 +34,49 @@ class ConsoleTest(unittest.TestCase):
         self.assertIn("ZeroDivisionError", events[-1]["value"])
         self.call("run", source="add(4)")
         self.assertEqual(self.call("drain")[0]["value"]["text"], "6")
+
+    def test_worksheet_exports_and_session_lifetime(self):
+        def invoke(*args):
+            return self.host("call", name="XLLPY.CONSOLE.SCALE", args=args)
+
+        self.call("run", source="""from statistics import mean
+def _helper(n): return n + 1
+def unsupported(*items): return items
+rate = 2
+def scale(n: int, factor=3): return _helper(n) * factor * rate""")
+        self.assertIn("fixed positional signature", self.call("drain")[0]["value"])
+        exports = self.host("worksheetFunctions")
+        self.assertEqual([f["name"] for f in exports], ["XLLPY.console.scale"])
+        self.assertEqual(invoke(3.5, {"missing": True}), 24)
+        self.assertNotIn("worksheetFormulas", self.call("run", source="rate = 1"))
+        self.assertEqual(invoke(3.5), 12)
+        self.call("clear")
+        self.assertEqual(self.call("run", source="def scale(n): return [[n, rate]]")["worksheetFormulas"],
+                         ["=XLLPY.console.scale(n)"])
+        self.assertEqual(invoke(7), [[7, 1]])
+        self.assertTrue(self.call("detach"))
+        self.assertEqual(invoke(7), {"error": 29})
+        # An old window can finish executing after its replacement has opened.
+        self.host("repl", session="next", action="open")
+        self.addCleanup(self.host, "repl", session="next", action="close")
+        self.call("run", source="def old(): return 99")
+        self.call("close")
+        self.assertEqual(self.host("worksheetFunctions"), [])
+
+    def test_startup_refresh_and_console_name_collision(self):
+        self.call("run", source="def scale(n): return 2*n\ndef answer(): return 42")
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder, "functions.py")
+            path.write_text("from xll_python import function\n@function(name='XLLPY.CONSOLE.SCALE')\n"
+                            "def triple(n): return 3*n\n", encoding="utf-8")
+            self.addCleanup(self.host, "discover", folders=[], packages=[], refresh=True)
+            discovered = self.host("discover", folders=[folder], packages=[], refresh=True)
+            self.assertEqual(discovered["errors"], [])
+            self.assertEqual({f["name"] for f in discovered["functions"]},
+                             {"XLLPY.CONSOLE.SCALE", "XLLPY.console.answer"})
+            self.assertEqual(self.host("call", name="xllpy.console.scale", args=[4]), 12)
+            self.host("discover", folders=[], packages=[], refresh=True)
+            self.assertEqual(self.host("call", name="xllpy.console.scale", args=[4]), 8)
 
     def test_live_objects_paging_and_cycles(self):
         self.call("run", source="a = list(range(60))\na[0] = a\nprint('items', a, end='!')")

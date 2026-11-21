@@ -66,6 +66,17 @@ Press **Enter** to run a command or **Shift+Enter** to insert a line. Incomplete
 
 Variables persist while the console window is open. **Clear output** clears the transcript and releases inspector references while keeping your variables. Reopening a closed window starts a fresh session. If you close the window during a command, that command can finish in the background.
 
+To test a function in a worksheet, define it in the console:
+
+```python
+def double(x):
+    return 2 * x
+```
+
+Enter `21` in A1 and `=XLLPY.console.double(A1)` in B1. B1 shows **42**. Redefine `double` in the console and Excel recalculates the existing formula. The function can use console variables. For a plain function, press **F9** after changing a variable it reads.
+
+Public functions defined in the console with fixed positional parameters are available in every workbook in that Excel instance. Use a leading underscore for a private helper. A startup function with the same Excel name takes precedence. Deleting the definition or closing the console removes the worksheet function. To keep a function across Excel sessions, save it in a startup folder with `@function(name="XLLPY.console.double")` to keep the same formula.
+
 ## VS Code web IDE
 
 **Open IDE** hosts the live **vscode.dev** editor in WebView2. This feature needs internet access to the editor and the Microsoft Edge WebView2 Runtime. The interpreter, worksheet registration, script runner and pip bootstrap work independently of the editor.

@@ -42,7 +42,7 @@ def page(profile, url):
         ws.close()
 
 
-def verify_console(base, pid):
+def verify_console(base, pid, sheet):
     with page(base/"profile"/"ConsoleWebView2","https://python-console.example/") as (js, send):
         wait_for(lambda: js("!!document.querySelector('#source')"))
         def type_code(code):
@@ -78,6 +78,20 @@ def verify_console(base, pid):
         wait_for(lambda: js("transcript.childElementCount === 0"))
         run_code("record['values'][0]")
         assert rendered(".result") == str(pid)
+        cell = sheet.Range("N1")
+        run_code("factor = 2\ndef scale(x, extra=1): return factor*x + extra")
+        assert "=XLLPY.console.scale(x, extra)" in rendered(".entry:last-child .output")
+        cell.Formula2 = "=XLLPY.console.scale(B1)"
+        assert cell.Value2 == 85, cell.Text
+        run_code("def scale(x, extra=1): return x + extra")
+        wait_for(lambda: cell.Value2 == 43)
+        run_code("def scale(x): return 3*x")
+        wait_for(lambda: cell.Value2 == 126)
+        run_code("del scale")
+        wait_for(lambda: cell.Text in ("#NAME?", "#VALUE!"))
+        run_code("def scale(x): return x")
+        wait_for(lambda: cell.Value2 == 42)
+        print("PASS: a worksheet cell calls a console function and tracks redefinition, signature changes and deletion", flush=True)
         marker = base / "finished-after-close"
         type_code(f"from pathlib import Path\nprint('started')\ntime.sleep(2)\nPath({str(marker)!r}).touch()")
         js("run.click()")

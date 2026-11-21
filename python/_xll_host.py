@@ -26,6 +26,7 @@ from _xll_repl import Console
 
 
 _functions = {}
+_startup_entries = []
 _managed_paths = []
 _script_lock = threading.RLock()
 _capture = threading.local()
@@ -64,6 +65,7 @@ class _Output:
 sys.stdout = _Output(sys.stdout, "stdout")
 sys.stderr = _Output(sys.stderr, "stderr")
 _consoles = {}
+_worksheet_console = None
 
 
 def _annotation(annotation):
@@ -84,18 +86,20 @@ def _cell_name(name):
     return column <= 16384 and int(match[2]) <= 1048576
 
 
-def _register(fn, functions, entries):
+def _register(fn, functions, entries, console_name=None):
     opt = getattr(fn, "__excel_function__", None)
     raw_return = fn.__annotations__.get("return")
-    if opt is None and not (typing.get_origin(raw_return) is typing.Annotated or
+    if console_name is None and opt is None and not (typing.get_origin(raw_return) is typing.Annotated or
                             isinstance(raw_return, str) and "Annotated" in raw_return):
         return
     hints = typing.get_type_hints(fn, include_extras=True)
     ret = _annotation(hints.get("return"))
     opt = opt or next((x for x in ret[1:] if isinstance(x, Function)), None)
+    if console_name is not None and opt is None:
+        opt = Function(category="Python Console", volatile=True)
     if opt is None:
         return
-    name = opt.name or fn.__name__
+    name = console_name or opt.name or fn.__name__
     if (not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]{0,254}", name)
         or _cell_name(name)):
         raise ValueError(f"Invalid or cell-like Excel function name: {name}")
@@ -119,6 +123,52 @@ def _register(fn, functions, entries):
     entries.append(dict(dataclasses.asdict(opt), name=name, arguments=args,
                         asynchronous=asynchronous, description=opt.description or inspect.getdoc(fn) or ""))
     functions[name.upper()] = (fn, signature, hints)
+
+
+class _WorksheetConsole(Console):
+    def __init__(self, capture, session):
+        super().__init__(capture, session)
+        self.definitions = {}
+        self.functions = {}
+        self.entries = []
+
+    def run(self, source):
+        result = super().run(source)
+        if result["incomplete"]:
+            return result
+        definitions = {name: fn for name, fn in self.namespace.copy().items()
+                       if isinstance(name, str) and not name.startswith("_") and inspect.isfunction(fn)
+                       and fn.__module__ == self.module_name and fn.__name__ == name}
+        if definitions == self.definitions:
+            return result
+        functions, entries = {}, []
+        for name, fn in definitions.items():
+            excel_name = "XLLPY.console." + name
+            try:
+                _register(fn, functions, entries, console_name=excel_name)
+                if excel_name.upper() in _functions:
+                    self.stderr.write(f"{excel_name} is already provided by a startup function.\n")
+            except Exception as error:
+                self.stderr.write(f"Cannot register {excel_name}: {error}\n")
+        if self.functions != functions:
+            formulas = []
+            for entry in entries:
+                key = entry["name"].upper()
+                if key not in _functions and functions[key] != self.functions.get(key):
+                    arguments = ", ".join(arg["name"] for arg in entry["arguments"])
+                    formulas.append(f"={entry['name']}({arguments})")
+            result["worksheetFormulas"] = formulas
+        self.definitions = definitions
+        self.functions = functions
+        self.entries = entries
+        return result
+
+
+def _worksheet_entries():
+    console = _worksheet_console
+    if console is None:
+        return _startup_entries
+    return _startup_entries + [entry for entry in console.entries if entry["name"].upper() not in _functions]
 
 
 class _FreshSource(importlib.machinery.SourceFileLoader):
@@ -152,7 +202,7 @@ sys.meta_path.insert(sys.meta_path.index(importlib.machinery.PathFinder), _start
 
 
 def _discover(folders, packages, refresh=False):
-    global _functions, _managed_paths
+    global _functions, _startup_entries, _managed_paths
     previous_roots = _startup_imports.roots
     roots = tuple(os.path.join(os.path.normcase(os.path.abspath(folder)), "") for folder in folders)
     previous_modules = {}
@@ -201,9 +251,9 @@ def _discover(folders, packages, refresh=False):
                     errors.append(f"{path}\n{traceback.format_exc()}")
         if refresh and errors:
             raise ValueError("Refresh failed. Previous functions remain active.\n" + "\n".join(errors))
-        _functions = functions
+        _functions, _startup_entries = functions, entries
         _managed_paths = [path for path in sys.path if path not in original]
-        return dict(functions=entries, errors=errors)
+        return dict(functions=_worksheet_entries(), errors=errors)
     except BaseException:
         sys.path[:] = old_path
         if refresh:
@@ -358,6 +408,9 @@ def _execute(operation, request):
     registration = None
     if operation == "call":
         registration = _functions.get(request["name"].upper())
+        console = _worksheet_console
+        if registration is None and console is not None:
+            registration = console.functions.get(request["name"].upper())
         if registration is None:
             return _encode(ExcelError(29))  # Excel can still call a deleted function from an existing formula.
     with _debug_lock:
@@ -380,7 +433,7 @@ def _execute(operation, request):
 
 
 def dispatch(message):
-    global _debug
+    global _debug, _worksheet_console
     try:
         req = json.loads(message)
         op = req["op"]
@@ -388,15 +441,24 @@ def dispatch(message):
             session = req["session"]
             action = req["action"]
             if action == "open":
-                _consoles[session] = Console(_capture, session)
+                _consoles[session] = _worksheet_console = _WorksheetConsole(_capture, session)
                 value = None
+            elif action == "detach":
+                value = False
+                if _worksheet_console is _consoles[session]:
+                    value = bool(_worksheet_console.functions)
+                    _worksheet_console = None
             elif action == "close":
                 console = _consoles.pop(session, None)
+                if _worksheet_console is console:
+                    _worksheet_console = None
                 if console:
                     console.close()
                 value = None
             else:
                 value = _consoles[session].request(action, req.get("args", {}))
+        elif op == "worksheetFunctions":
+            value = _worksheet_entries()
         elif op == "discover":
             value = _discover(req["folders"], req["packages"], req.get("refresh", False))
         elif op in ("call", "script"):

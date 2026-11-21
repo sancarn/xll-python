@@ -64,13 +64,14 @@ def verify(app, pid, base, home):
     console = window("Python Console")
     if os.environ.get("XLL_WEB_TEST"):
         from web_editor import verify_console, verify_reopened_console
-        verify_console(base, pid)
+        verify_console(base, pid, app.ActiveSheet)
     close(console)
     if os.environ.get("XLL_WEB_TEST"):
         wait_for(lambda: not hwnd_for("Python Console"))
         click_ribbon("Console")
         console = window("Python Console")
         verify_reopened_console(base)
+        wait_for(lambda: app.ActiveSheet.Range("N1").Text in ("#NAME?", "#VALUE!"))
         close(console)
 
     click_ribbon("Startup Folders")

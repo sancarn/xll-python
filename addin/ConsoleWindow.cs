@@ -5,6 +5,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using ExcelDna.Integration;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
@@ -33,7 +34,16 @@ namespace PythonExcel
             Shown += async (s, e) => await Initialize();
             FormClosed += (s, e) => {
                 closed = true;
-                if (sessionOpen) QueueRequest(null);
+                if (sessionOpen)
+                {
+                    try
+                    {
+                        if ((bool)Call("detach"))
+                            ExcelAsyncUtil.QueueAsMacro(Functions.ConsoleChanged);
+                    }
+                    catch (Exception error) { Runtime.Log(error.ToString()); }
+                    finally { QueueRequest(null); }
+                }
             };
         }
 
@@ -130,6 +140,8 @@ namespace PythonExcel
                         Drain(id);
                     value = await work;
                     if (!closed) Drain(id);
+                    if (((System.Collections.IDictionary)value).Contains("worksheetFormulas"))
+                        await ExcelAsyncUtil.QueueAsMacroTask(Functions.ConsoleChanged);
                 }
                 else value = Call(action, args);
                 Send(new { id, value });

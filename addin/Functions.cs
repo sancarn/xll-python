@@ -48,7 +48,15 @@ namespace PythonExcel
             {
                 ExcelDna.Logging.LogDisplay.WriteLine("Python startup errors. See " + Runtime.Root + @"\python-excel.log");
             }
-            var entries = ((IList)discovered["functions"]).Cast<IDictionary>()
+            Synchronize((IList)discovered["functions"], refresh);
+        }
+
+        internal static void ConsoleChanged() =>
+            Synchronize((IList)Runtime.Request(new {op="worksheetFunctions"}), true);
+
+        static void Synchronize(IList functions, bool recalculate)
+        {
+            var entries = functions.Cast<IDictionary>()
                 .ToDictionary(f => (string)f["name"], StringComparer.OrdinalIgnoreCase);
             foreach (string name in registered.Keys.ToArray())
             {
@@ -73,7 +81,7 @@ namespace PythonExcel
                 }
             generation++;
             Runtime.Log("Loaded " + entries.Count + " Python worksheet functions.");
-            if (refresh)
+            if (recalculate)
             {
                 dynamic app = ExcelDnaUtil.Application;
                 app.CalculateFullRebuild();

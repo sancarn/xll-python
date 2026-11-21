@@ -48,8 +48,20 @@ namespace PythonExcel
         {
             if (Interlocked.Exchange(ref busy, 1) != 0) return;
             string staged = null;
+            UpdateProgress progress = null;
+            void ShowResult(Action showDialog)
+            {
+                ExcelAsyncUtil.QueueAsMacro(() => {
+                    progress?.Dispose();
+                    showDialog();
+                });
+            }
+
             try
             {
+                progress = new UpdateProgress();
+                progress.Show(new Owner());
+                progress.Refresh();
                 string target = ExcelDnaUtil.XllPath;
                 string version;
                 using (var reader = new StreamReader(typeof(Updates).Assembly.GetManifestResourceStream("release.txt")))
@@ -67,7 +79,7 @@ namespace PythonExcel
                     string original = RestartPlan.Hash(target);
                     if (VersionOf(release.tag_name) < VersionOf(version) || original == hash)
                     {
-                        Report("You already have the latest available update.");
+                        ShowResult(() => Report("You already have the latest available update."));
                         return;
                     }
                     string url = "https://github.com/" + Repository + "/releases/download/" + release.tag_name + "/" + AssetName;
@@ -85,14 +97,14 @@ namespace PythonExcel
                         throw new InvalidDataException("The downloaded add-in failed verification.");
 
                     var plan = new RestartPlan { Target=target, Staged=staged, OriginalHash=original, ReleaseHash=hash };
-                    ExcelAsyncUtil.QueueAsMacro(() => Confirm(plan, release.tag_name));
+                    ShowResult(() => Confirm(plan, release.tag_name));
                     staged = null; // Confirm or the helper owns the verified file.
                 }
             }
             catch (Exception e)
             {
                 Discard(staged);
-                Report("Could not check or download the update.\n" + e.GetBaseException().Message);
+                ShowResult(() => Report("Could not check or download the update.\n" + e.GetBaseException().Message));
             }
         }
 
@@ -106,10 +118,8 @@ namespace PythonExcel
 
         static void Report(string message)
         {
-            ExcelAsyncUtil.QueueAsMacro(() => {
-                try { MessageBox.Show(new Owner(), message, Caption); }
-                finally { Interlocked.Exchange(ref busy, 0); }
-            });
+            try { MessageBox.Show(new Owner(), message, Caption); }
+            finally { Interlocked.Exchange(ref busy, 0); }
         }
 
         static void Confirm(RestartPlan plan, string version)

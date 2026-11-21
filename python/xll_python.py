@@ -1,6 +1,6 @@
 """Public API for worksheet function modules loaded by the Python ribbon."""
 from dataclasses import dataclass
-from typing import Literal
+from typing import Callable, Literal, TypeVar, TypedDict, Unpack, overload
 
 from _xll_application import Application
 
@@ -19,6 +19,31 @@ class Function:
     cluster_safe: bool = False
     help_topic: str = ""
     generator_instances: Literal["one", "many"] = "one"
+
+
+class _Options(TypedDict, total=False):
+    name: str
+    category: str
+    description: str
+    asynchronous: bool | None
+    volatile: bool
+    thread_safe: bool
+    hidden: bool
+    macro_type: bool
+    cluster_safe: bool
+    help_topic: str
+    generator_instances: Literal["one", "many"]
+
+
+_F = TypeVar("_F", bound=Callable)
+
+
+@overload
+def function(fn: _F, **options: Unpack[_Options]) -> _F: ...
+
+
+@overload
+def function(fn: None = None, **options: Unpack[_Options]) -> Callable[[_F], _F]: ...
 
 
 def function(fn=None, **options):

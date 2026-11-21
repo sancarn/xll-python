@@ -128,7 +128,7 @@ def main():
         env = dict(os.environ,XLL_PYTHON_HOME=str(profile))
         if "--ui" in sys.argv:
             env.update(PIP_NO_INDEX="1", PIP_FIND_LINKS=base.as_uri())
-        if os.environ.get("XLL_WEB_TEST"):
+        if "--ui" in sys.argv:
             env["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = "--remote-debugging-port=0"
         proc = subprocess.Popen([excel,"/x","/automation",base/"book.csv"], env=env,startupinfo=startup)
         app = None

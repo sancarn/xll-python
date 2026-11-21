@@ -1,8 +1,12 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using ExcelDna.Integration;
@@ -14,216 +18,204 @@ namespace PythonExcel
     internal sealed class IdeWindow : Form
     {
         static readonly WebWindowHost host = new WebWindowHost("Excel Python IDE", () => new IdeWindow());
-        readonly WebView2 web=new WebView2{Dock=DockStyle.Fill};
-        readonly TextBox output=Ui.ConsoleBox(), formula=new TextBox{Width=300};
-        readonly Label file=new Label{AutoSize=true,Margin=new Padding(8,8,4,0)};
-        readonly NumericUpDown line=new NumericUpDown{Width=65,Minimum=0,Maximum=10000000};
-        readonly System.Windows.Forms.Timer timer=new System.Windows.Forms.Timer{Interval=250};
-        string target, lastState;
-        bool running;
+        readonly WebView2 web = new WebView2 { Dock = DockStyle.Fill };
+        readonly string token = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
+        readonly int pid = Process.GetCurrentProcess().Id;
+        readonly TaskCompletionSource<int> listening = new TaskCompletionSource<int>();
+        Process backend;
+        ProcessJob job;
+        Uri origin;
+        bool closed, ready, closing, allowClose;
+        readonly Stopwatch closeWait = new Stopwatch();
+        string version;
 
         internal static void Open() => host.Open();
         internal static void Shutdown() => host.Shutdown();
 
         IdeWindow()
         {
-            Text="Python IDE — Excel"; ClientSize=new Size(1140,780); MinimumSize=new Size(760,500);
-            var scriptBar=new FlowLayoutPanel{Dock=DockStyle.Top,AutoSize=true};
-            scriptBar.Controls.Add(Ui.Button("Choose script…",(s,e)=>Choose()));
-            scriptBar.Controls.Add(Ui.Button("Run saved script",(s,e)=>RunScript()));
-            scriptBar.Controls.Add(file);
-            file.Text="Open a local Python file in VS Code or choose a script.";
-            var debugBar=new FlowLayoutPanel{Dock=DockStyle.Top,AutoSize=true};
-            debugBar.Controls.Add(new Label{Text="Breakpoint line (0 = first)",AutoSize=true,Margin=new Padding(6,8,0,0)});
-            debugBar.Controls.Add(line);
-            debugBar.Controls.Add(Ui.Button("Arm breakpoint",(s,e)=>Arm()));
-            foreach(string cmd in new[]{"Step","Continue","Detach"})
-            {
-                string action=cmd=="Detach"?"stop":cmd.ToLowerInvariant();
-                debugBar.Controls.Add(Ui.Button(cmd,(s,e)=>DebugCommand(action)));
-            }
-            var formulaBar=new FlowLayoutPanel{Dock=DockStyle.Bottom,AutoSize=true};
-            formulaBar.Controls.Add(new Label{Text="Excel formula",AutoSize=true,Margin=new Padding(6,8,0,0)});
-            formulaBar.Controls.Add(formula);
-            formulaBar.Controls.Add(Ui.Button("Evaluate",(s,e)=>Evaluate()));
-            formula.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){e.SuppressKeyPress=true;Evaluate();}};
-            var split=new SplitContainer{Dock=DockStyle.Fill,Orientation=Orientation.Horizontal,Height=640,SplitterDistance=495};
-            split.Panel1.Controls.Add(web); split.Panel2.Controls.Add(output);
-            Controls.Add(split); Controls.Add(formulaBar); Controls.Add(debugBar); Controls.Add(scriptBar);
-            Shown+=async(s,e)=>await StartEditor();
-            timer.Tick+=(s,e)=>Poll();
-            FormClosed+=(s,e)=>{ timer.Stop(); DebugCommand("stop"); timer.Dispose(); };
-        }
-
-        // Transfer only handles selected by the user in the native picker. Web content
-        // cannot supply filesystem paths, invoke the interpreter, or evaluate formulas.
-        const string TrackSelection=@"
-(() => {
- if (window.top !== window || location.origin !== 'https://vscode.dev') return;
- let pending;
- window.chrome.webview.addEventListener('message', e => {
-   if (!pending || e.data?.type !== 'file-result') return;
-   const {resolve,reject,save}=pending; pending=undefined;
-   const handles=Array.from(e.additionalObjects || []);
-   if (!handles.length) reject(new DOMException('File selection cancelled','AbortError'));
-   else resolve(save ? handles[0] : handles);
- });
- for (const [name,save] of [['showOpenFilePicker',false],['showSaveFilePicker',true]]) {
-   window[name]=async (options={}) => {
-     if (!navigator.userActivation.isActive || pending)
-       throw new DOMException('Choose a file from the editor','SecurityError');
-     return new Promise((resolve,reject) => {
-       pending={resolve,reject,save};
-       window.chrome.webview.postMessage({type:'file-picker',save,multiple:!!options.multiple,
-                                          suggestion:String(options.suggestedName || '')});
-     });
-   };
- }
-})();";
-
-        static bool EditorOrigin(string url)
-        {
-            return Uri.TryCreate(url,UriKind.Absolute,out var uri)
-                && uri.GetLeftPart(UriPartial.Authority)=="https://vscode.dev";
-        }
-
-        void FileRequest(object sender, CoreWebView2WebMessageReceivedEventArgs e)
-        {
-            var core=web.CoreWebView2;
-            if(!EditorOrigin(e.Source) || !EditorOrigin(core.Source)) return;
-            if(e.WebMessageAsJson.Length>4096) return;
-            var request=Runtime.Json.DeserializeObject(e.WebMessageAsJson) as IDictionary;
-            if(request==null || !Equals(request["type"],"file-picker")) return;
-            BeginInvoke(new Action(()=>PickForEditor(core,request)));
-        }
-
-        void PickForEditor(CoreWebView2 core, IDictionary request)
-        {
-            if(!EditorOrigin(core.Source)) return;
-            var handles=new System.Collections.Generic.List<object>();
-            string[] selected=new string[0];
-            try
-            {
-                if(Equals(request["save"],true))
-                {
-                    using(var dialog=new SaveFileDialog{Title="Save file for editing in vscode.dev",
-                        Filter="All files (*.*)|*.*",RestoreDirectory=true,
-                        FileName=Path.GetFileName(Convert.ToString(request["suggestion"]))})
-                    {
-                        if(dialog.ShowDialog(this)==DialogResult.OK)
-                        {
-                            if(!File.Exists(dialog.FileName)) using(File.Open(dialog.FileName,FileMode.CreateNew)) {}
-                            selected=new[]{dialog.FileName};
-                        }
+            Text = "Python IDE — Excel";
+            ClientSize = new Size(1140, 780);
+            MinimumSize = new Size(760, 500);
+            Controls.Add(web);
+            Shown += async (s, e) => {
+                try { await Start(); }
+                catch (Exception error) {
+                    if (!closed) {
+                        Runtime.Log(error.ToString());
+                        MessageBox.Show(this, error.Message, "Excel Python IDE");
+                        Close();
                     }
                 }
-                else
-                {
-                    using(var dialog=new OpenFileDialog{Title="Open file for editing in vscode.dev",
-                        Filter="All files (*.*)|*.*",RestoreDirectory=true,Multiselect=Equals(request["multiple"],true)})
-                        if(dialog.ShowDialog(this)==DialogResult.OK) selected=dialog.FileNames;
-                }
-                if(!EditorOrigin(core.Source)) return;
-                foreach(string path in selected)
-                    handles.Add(core.Environment.CreateWebFileSystemFileHandle(path,CoreWebView2FileSystemHandlePermission.ReadWrite));
-                if(selected.Length>0 && (selected[0].EndsWith(".py",StringComparison.OrdinalIgnoreCase) ||
-                   selected[0].EndsWith(".pyw",StringComparison.OrdinalIgnoreCase))) SelectScript(selected[0]);
-            }
-            catch(Exception error){handles.Clear(); Print(error.Message);}
-            if(EditorOrigin(core.Source)) core.PostWebMessageAsJson(@"{""type"":""file-result""}",handles);
-        }
-
-        async Task StartEditor()
-        {
-            try
-            {
-                WebWindowHost.Configure(web, "WebView2");
-                await web.EnsureCoreWebView2Async();
-                web.CoreWebView2.WebMessageReceived+=FileRequest;
-                await web.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(TrackSelection);
-                web.CoreWebView2.NavigationCompleted+=(s,e)=> {
-                    if(!e.IsSuccess) Print("VS Code navigation: "+e.WebErrorStatus);
-                };
-                web.Source=new Uri("https://vscode.dev/");
-            }
-            catch(Exception e){ Print(e.Message); Runtime.Log(e.ToString()); }
-        }
-
-        void SelectScript(string path){target=path;file.Text=path;}
-        bool Choose()
-        {
-            using(var picker=Ui.ScriptPicker())
-            {
-                if(picker.ShowDialog(this)!=DialogResult.OK) return false;
-                SelectScript(picker.FileName); return true;
-            }
-        }
-        void Print(string text)
-        {
-            if(!IsDisposed) output.AppendText(text.Replace("\r\n","\n").Replace("\n","\r\n")+"\r\n");
-        }
-        async void RunScript()
-        {
-            if(running || (target==null && !Choose())) return;
-            string path=target;
-            running=true; Print("Running "+path);
-            try { Print(await Task.Run(()=>ExcelObjects.RunScript(path))); Print("Finished."); }
-            catch(Exception e){Print(e.Message);}
-            finally{running=false;}
-        }
-
-        void Arm()
-        {
-            if(target==null && !Choose()) return;
-            try {
-                Runtime.Request(new {op="arm",path=target,line=(int)line.Value});
-                lastState=null; timer.Start(); Print("Breakpoint armed for "+target+". Run the script or recalculate its worksheet function.");
-            } catch(Exception e){Print(e.Message);}
-        }
-
-        void DebugCommand(string command)
-        {
-            try { Runtime.Request(new {op="debug",command}); } catch(Exception e){Print(e.Message);}
-        }
-        void Poll()
-        {
-            try {
-                var state=(IDictionary)Runtime.Request(new {op="debug"});
-                string status=(string)state["status"], signature=Runtime.Json.Serialize(state);
-                if(signature==lastState) return;
-                lastState=signature;
-                if(status=="paused") Print(state["function"]+" line "+state["line"]+"    "+state["source"]+"\r\n"+Runtime.Json.Serialize(state["locals"]));
-                else Print("Debugger "+status);
-                if(status=="finished" || status=="detached") timer.Stop();
-            } catch(Exception e){timer.Stop();Print(e.Message);}
-        }
-
-        async void Evaluate()
-        {
-            string expression=formula.Text.Trim();
-            if(expression.Length==0) return;
-            try
-            {
-                string result=null;
-                await ExcelAsyncUtil.QueueAsMacroTask(()=> {
-                    dynamic app=ExcelDnaUtil.Application;
-                    object value=app.Evaluate(expression);
-                    if (value!=null && System.Runtime.InteropServices.Marshal.IsComObject(value))
-                        value=((dynamic)value).Value2;
-                    var values=value as Array;
-                    if(values!=null && values.Rank==2)
-                    {
-                        var rows=new object[values.GetLength(0)][];
-                        for(int r=0;r<rows.Length;r++)
-                            rows[r]=Enumerable.Range(0,values.GetLength(1)).Select(c=>values.GetValue(r+values.GetLowerBound(0),c+values.GetLowerBound(1))).ToArray();
-                        result=Runtime.Json.Serialize(rows);
-                    }
-                    else result=Convert.ToString(value,System.Globalization.CultureInfo.InvariantCulture);
+            };
+            FormClosing += (s, e) => {
+                if (host.IsClosing || !ready || allowClose || e.CloseReason != CloseReason.UserClosing) return;
+                if (closing && closeWait.Elapsed >= TimeSpan.FromSeconds(5) &&
+                    MessageBox.Show(this, "Close the IDE now and discard any unsaved edits?", "Close Excel Python IDE",
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) == DialogResult.Yes)
+                    return;
+                e.Cancel = true;
+                if (closing) return;
+                closeWait.Restart();
+                closing = true;
+                web.CoreWebView2.PostWebMessageAsJson(@"{""type"":""closing""}");
+            };
+            FormClosed += (s, e) => {
+                closed = true;
+                listening.TrySetCanceled();
+                job?.Dispose();
+                backend?.Dispose();
+                // Detach also when the renderer has exited and its cookie manager is unavailable.
+                Task.Run(() => {
+                    try { Runtime.Request(new { op = "ideDisconnect", session = token }); }
+                    catch (Exception error) { Runtime.Log(error.ToString()); }
                 });
-                Print(expression+" = "+result);
+                try {
+                    if (origin != null && web.CoreWebView2 != null)
+                        web.CoreWebView2.CookieManager.DeleteCookies("xll_" + origin.Port, origin.AbsoluteUri);
+                } catch (Exception error) { Runtime.Log(error.ToString()); }
+            };
+        }
+
+        string WriteWorkspace(IDictionary environment)
+        {
+            var settings = Runtime.LoadSettings();
+            var roots = settings.folders.Concat(settings.packages).Distinct(StringComparer.OrdinalIgnoreCase);
+            var paths = ((IList)environment["paths"]).Cast<string>().Where(Directory.Exists);
+            var preferences = new Dictionary<string, object> {
+                { "python.pythonPath", Runtime.Python }, { "python.defaultInterpreterPath", Runtime.Python },
+                { "python.analysis.extraPaths", paths.ToArray() }, { "telemetry.telemetryLevel", "off" }
+            };
+            var workspace = new {
+                folders = roots.Select(path => new { path }).ToArray(),
+                settings = preferences,
+                launch = new { version = "0.2.0", configurations = new object[] {
+                    new { type = "excel-python", request = "attach", name = "Debug Current File in Excel", currentFile = true },
+                    new { type = "excel-python", request = "attach", name = "Debug Worksheet Functions" }
+                }}
+            };
+            byte[] content = Encoding.UTF8.GetBytes(Runtime.Json.Serialize(workspace));
+            string key;
+            using (var hash = SHA256.Create())
+                key = BitConverter.ToString(hash.ComputeHash(content), 0, 12).Replace("-", "");
+            string dir = Path.Combine(Runtime.Root, "IDE", "workspaces", key);
+            Directory.CreateDirectory(dir);
+            string file = Path.Combine(dir, "Excel Python.theia-workspace");
+            if (!File.Exists(file)) {
+                string temp = file + "." + Guid.NewGuid().ToString("N");
+                File.WriteAllBytes(temp, content);
+                try { File.Move(temp, file); }
+                catch (IOException) when (File.Exists(file)) { File.Delete(temp); }
             }
-            catch(Exception e){Print(e.Message);}
+            return file;
+        }
+
+        async Task Start()
+        {
+            WebWindowHost.Configure(web, "IdeWebView2");
+            await web.EnsureCoreWebView2Async();
+            if (closed) return;
+            web.CoreWebView2.NavigateToString("<html><body style='font:16px Segoe UI;padding:2em'>Opening Excel Python IDE…</body></html>");
+            string dir = await Task.Run(Runtime.InstallIde);
+            if (closed) return;
+            var env = (IDictionary)await Task.Run(() => Runtime.Request(new { op = "ideEnvironment" }));
+            if (closed) return;
+            version = (string)env["version"];
+            string worksheet = WriteWorkspace(env);
+            var info = new ProcessStartInfo(Path.Combine(dir, "node.exe"),
+                "lib/backend/main.js --hostname 127.0.0.1 --port 0 \"" + worksheet + "\"") {
+                WorkingDirectory = dir, UseShellExecute = false, CreateNoWindow = true,
+                RedirectStandardOutput = true, RedirectStandardError = true
+            };
+            string hostname = "xll-" + Guid.NewGuid().ToString("N") + ".localhost";
+            info.EnvironmentVariables["XLL_IDE_HOST"] = hostname;
+            info.EnvironmentVariables["XLL_IDE_TOKEN"] = token;
+            info.EnvironmentVariables["THEIA_DEFAULT_PLUGINS"] = "local-dir:./plugins";
+            info.EnvironmentVariables["THEIA_CONFIG_DIR"] = Path.Combine(Runtime.Root, "IDE", "config");
+            info.EnvironmentVariables["THEIA_PARENT_PID"] = pid.ToString();
+            backend = new Process { StartInfo = info, EnableRaisingEvents = true };
+            backend.OutputDataReceived += (s, e) => {
+                const string prefix = "XLL_IDE_PORT=";
+                if (e.Data == null) return;
+                if (e.Data.StartsWith(prefix) && int.TryParse(e.Data.Substring(prefix.Length), out int port))
+                    listening.TrySetResult(port);
+                else Runtime.Log(e.Data);
+            };
+            backend.ErrorDataReceived += (s, e) => { if (e.Data != null) Runtime.Log(e.Data); };
+            backend.Exited += (s, e) => listening.TrySetException(new IOException("The IDE helper exited. See python-excel.log."));
+            job = new ProcessJob();
+            backend.Start();
+            try { job.Add(backend); } catch { backend.Kill(); throw; }
+            backend.BeginOutputReadLine();
+            backend.BeginErrorReadLine();
+            if (await Task.WhenAny(listening.Task, Task.Delay(60000)) != listening.Task)
+                throw new IOException("Timed out opening the IDE. See python-excel.log.");
+            int boundPort = await listening.Task;
+            if (closed) return;
+            origin = new Uri("http://" + hostname + ":" + boundPort + "/");
+            var core = web.CoreWebView2;
+            var cookie = core.CookieManager.CreateCookie("xll_" + boundPort, token, origin.Host, "/");
+            cookie.IsHttpOnly = true;
+            cookie.IsSecure = false;
+            cookie.SameSite = CoreWebView2CookieSameSiteKind.Strict;
+            core.CookieManager.AddOrUpdateCookie(cookie);
+            core.ProcessFailed += (s,e) => {
+                if (e.ProcessFailedKind == CoreWebView2ProcessFailedKind.BrowserProcessExited ||
+                    e.ProcessFailedKind == CoreWebView2ProcessFailedKind.RenderProcessExited) {
+                    ready = false;
+                    closing = false;
+                }
+            };
+            core.NavigationStarting += (s,e) => { if (!IsLocal(e.Uri)) e.Cancel = true; };
+            core.NewWindowRequested += (s,e) => e.Handled = true;
+            core.WebMessageReceived += Receive;
+            core.Navigate(origin.AbsoluteUri);
+        }
+
+        bool IsLocal(string uri) => Uri.TryCreate(uri, UriKind.Absolute, out var target)
+            && target.GetLeftPart(UriPartial.Authority) == origin.GetLeftPart(UriPartial.Authority);
+
+        async void Receive(object sender, CoreWebView2WebMessageReceivedEventArgs e)
+        {
+            if (closed || !IsLocal(e.Source) || !IsLocal(web.CoreWebView2.Source)) return;
+            int id = 0;
+            try {
+                var req = Runtime.Json.Deserialize<IDictionary<string, object>>(e.WebMessageAsJson);
+                string operation = (string)req["operation"];
+                if (operation == "ready") { ready = true; return; }
+                if (operation == "closeResult") {
+                    if (closing && Equals(req["allow"], true)) { allowClose = true; BeginInvoke(new Action(Close)); }
+                    closing = false;
+                    return;
+                }
+                id = (int)req["id"];
+                var args = (IDictionary)req["args"];
+                object value = null;
+                switch (operation) {
+                    case "environment":
+                        value = new { pid, version, python = Runtime.Python, support = Runtime.Support };
+                        break;
+                    case "run":
+                        string path = Path.GetFullPath((string)args["path"]);
+                        value = await Task.Run(() => ExcelObjects.RunScript(path));
+                        break;
+                    case "connect":
+                        int port = Convert.ToInt32(args["port"]);
+                        string access = (string)args["token"];
+                        await Task.Run(() => Runtime.Request(new { op = "ideConnect", port, token = access, session = token }));
+                        break;
+                    case "refresh":
+                        await ExcelAsyncUtil.QueueAsMacroTask(() => Functions.Load(Runtime.LoadSettings(), true));
+                        break;
+                    default: throw new ArgumentException("Unknown Excel IDE command.");
+                }
+                Reply(new { id, value });
+            } catch (Exception err) { Reply(new { id, error = err.Message }); }
+        }
+        void Reply(object reply)
+        {
+            if (!closed && IsLocal(web.CoreWebView2.Source))
+                web.CoreWebView2.PostWebMessageAsJson(Runtime.Json.Serialize(reply));
         }
     }
 }
-

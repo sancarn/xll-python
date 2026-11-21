@@ -30,5 +30,21 @@
   "microsoft.web.webview2.nupkg": {
     "url": "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/1.0.3650.58/microsoft.web.webview2.1.0.3650.58.nupkg",
     "sha256": "911a472128c82ac8baa0c486c23342cc9dd6e7dc50d754e676726642ca065c60"
+  },
+  "node-v22.23.5-win-x64.zip": {
+    "url": "https://nodejs.org/dist/v22.23.5/node-v22.23.5-win-x64.zip",
+    "sha256": "4a191082e9706866830379d577d2cc8a50c776fcd9436a8d061b063ed0d9a0e3"
+  },
+  "debugpy-1.8.22-cp313-cp313-win_amd64.whl": {
+    "url": "https://files.pythonhosted.org/packages/d0/f5/c2b3e8260388d7b76bc4e5a3a29648a0ca47dca6a2721d6549ff2d944eee/debugpy-1.8.22-cp313-cp313-win_amd64.whl",
+    "sha256": "f49b1d6cecf326b63c06d7f517e4a6642777f758c58cb799e7bc5a6dd74721c2"
+  },
+  "python-grammar.vsix": {
+    "url": "https://open-vsx.org/api/vscode/python/1.95.3/file/vscode.python-1.95.3.vsix",
+    "sha256": "37c2a0cdfa668bd4dc37265d7d172300a20350098651b1843ee220a30c5e2d88"
+  },
+  "pyright.vsix": {
+    "url": "https://github.com/microsoft/pyright/releases/download/1.1.414/vscode-pyright.vsix",
+    "sha256": "6c38b791244241766467f557d7fa6aec5ef4cbefd6bc4b4d9bae0c3283a3114e"
   }
 }

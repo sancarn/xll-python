@@ -9,7 +9,8 @@ import traceback
 
 
 class Streams:
-    def __init__(self):
+    def __init__(self, before_next=lambda: None):
+        self.before_next = before_next
         self.condition = threading.Condition()
         self.active = {}
         self.pending = OrderedDict()
@@ -79,6 +80,7 @@ class Streams:
             with closing(generator):
                 while key in self.active:
                     try:
+                        self.before_next()
                         value = next(generator)
                     except StopIteration:
                         break
@@ -93,8 +95,13 @@ class Streams:
         try:
             empty = True
             async with aclosing(generator):
-                while key in self.active:
+                if key not in self.active:
+                    return
+                # Once running, close() schedules cancellation on this loop. Let that
+                # unwind the generator before aclose starts its async cleanup.
+                while True:
                     try:
+                        self.before_next()
                         value = await anext(generator)
                     except StopAsyncIteration:
                         break

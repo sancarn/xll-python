@@ -32,13 +32,17 @@ namespace PythonExcel
         public override object LoadImage(string id) => Published.Current?.Image(id) ?? base.LoadImage(id);
         public void RunPublished(IRibbonControl control) => Published.Current.Command(control.Id);
 
-        public void OpenCompiler(IRibbonControl control) => Guard(() => {
-            Runtime.Install();
-            var info = new System.Diagnostics.ProcessStartInfo(Path.Combine(Runtime.Home, "pythonw.exe"),
-                "-I " + Published.Quote(Path.Combine(Runtime.Support, "_xll_designer.py")) + " " + Published.Quote(ExcelDnaUtil.XllPath))
-                { UseShellExecute=false, WorkingDirectory=Runtime.Support };
-            System.Diagnostics.Process.Start(info).Dispose();
-        });
+        public void OpenCompiler(IRibbonControl control)
+        {
+            string template = ExcelDnaUtil.XllPath;
+            _ = Task.Run(() => Guard(() => {
+                Runtime.Install();
+                var info = new System.Diagnostics.ProcessStartInfo(Path.Combine(Runtime.Home, "pythonw.exe"),
+                    "-I " + Published.Quote(Path.Combine(Runtime.Support, "_xll_designer.py")) + " " + Published.Quote(template))
+                    { UseShellExecute=false, WorkingDirectory=Runtime.Support };
+                System.Diagnostics.Process.Start(info).Dispose();
+            }));
+        }
 
         static void Guard(Action action)
         {

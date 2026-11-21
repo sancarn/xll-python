@@ -1,5 +1,6 @@
 """Build two offline projects, then exercise their isolated packages, formulas and ribbon in Excel."""
 import base64
+import ctypes
 import json
 import os
 from pathlib import Path
@@ -12,6 +13,9 @@ import zipfile
 
 from excel_smoke import ROOT, connect, wait_for
 import psutil
+import win32gui
+import win32ui
+from PIL import Image
 from pywinauto import Desktop
 
 
@@ -74,6 +78,27 @@ def refresh():
     return manifest
 
 
+def button_icon(hwnd, control):
+    # Render the actual Excel window, even on a secondary or obscured desktop.
+    left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+    dc = win32gui.GetWindowDC(hwnd)
+    source = win32ui.CreateDCFromHandle(dc)
+    target = source.CreateCompatibleDC()
+    bmp = win32ui.CreateBitmap()
+    bmp.CreateCompatibleBitmap(source, right-left, bottom-top)
+    previous = target.SelectObject(bmp)
+    try:
+        assert ctypes.windll.user32.PrintWindow(hwnd, target.GetSafeHdc(), 2)
+        image = Image.frombytes("RGB", (right-left, bottom-top), bmp.GetBitmapBits(True), "raw", "BGRX")
+        rect = control.rectangle()
+        return image.crop((rect.left-left, rect.top-top, rect.right-left, rect.bottom-top))
+    finally:
+        target.SelectObject(previous)
+        win32gui.DeleteObject(bmp.GetHandle())
+        target.DeleteDC()
+        win32gui.ReleaseDC(hwnd, dc)
+
+
 def main():
     template = ROOT / "dist/PythonExcel.xll"
     with tempfile.TemporaryDirectory(dir=ROOT/".build", prefix="compiled-test-") as tmp:
@@ -131,7 +156,7 @@ def main():
                 main.child_window(title=label, control_type="TabItem").select()
                 control = main.child_window(title="Refresh "+label, control_type="Button").wrapper_object()
                 def icon_visible():
-                    image = control.capture_as_image().convert("RGB")
+                    image = button_icon(app.Hwnd, control)
                     return sum(count for count, (r,g,b) in image.getcolors(image.width*image.height)
                                if r > 175 and g < 65 and 120 < b < 180) > 50
                 wait_for(icon_visible, 10)

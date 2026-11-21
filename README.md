@@ -4,11 +4,11 @@
 
 [Product tour and installation guide](https://sancarn.github.io/xll-python/)
 
-[Download the latest 64-bit XLL](https://github.com/sancarn/xll-python/releases/latest/download/PythonExcel.xll). It contains CPython 3.13.12 for Windows x64, its standard library, the native DLLs, Tcl/Tk, development headers and import libraries, pip’s offline bootstrap wheel, and the Excel add-in. Worksheet functions and scripts run in the Excel process. Each pip command runs in a separate process using the same packaged interpreter.
+[Download the latest 64-bit XLL](https://github.com/sancarn/xll-python/releases/latest/download/xll-python.xll). It contains CPython 3.13.12 for Windows x64, its standard library, the native DLLs, Tcl/Tk, development headers and import libraries, pip’s offline bootstrap wheel, and the Excel add-in. Worksheet functions and scripts run in the Excel process. Each pip command runs in a separate process using the same packaged interpreter.
 
 ## Load the add-in
 
-1. Save `PythonExcel.xll` to a permanent local folder. If Windows marked the downloaded file as coming from the internet, review its source and use **Properties → Unblock** if appropriate. This build is unsigned.
+1. Save `xll-python.xll` to a permanent local folder. If Windows marked the downloaded file as coming from the internet, review its source and use **Properties → Unblock** if appropriate. This build is unsigned.
 2. In **64-bit desktop Excel for Windows**, open **File → Options → Add-ins → Manage Excel Add-ins → Go → Browse**. Select the XLL and leave it checked.
 3. Open the **Python** ribbon tab. The first operation that needs Python extracts the embedded payload under `%LOCALAPPDATA%\XllPython` and bootstraps pip from the bundled wheel. Installation works offline. Later launches reuse the installed files. With no configured folders, Excel opens the ribbon and initializes Python on first use. The add-in uses Windows’ .NET Framework 4.8.
 

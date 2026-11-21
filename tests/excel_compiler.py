@@ -65,6 +65,9 @@ async def async_value():
 def stream_value():
     yield VALUE
 
+@macro(name="Archive")
+def archive(): pass
+
 {'@macro(name="Refresh report")' if version == 1 else ''}
 def refresh():
     cell = Application.ActiveSheet.Range("B{version}")

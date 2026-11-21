@@ -12,7 +12,13 @@
 
 **Run Script** opens a Windows file picker. Select a Python file to run it as `__main__`. Its folder is on the import path while it runs. A window displays the script’s output or traceback.
 
-**Check for Updates** downloads the latest release from this repository and verifies its SHA-256 digest. When prompted, choose **Yes** to save the workbooks in this Excel instance and restart. New workbooks and edited read-only workbooks open Excel’s Save As dialog. Cancel there to keep Excel open. After Excel exits, a separate helper replaces the XLL at its existing path and reopens the saved workbooks. The add-in folder must be writable. If another Excel instance locks the XLL, the helper reopens the workbooks with the existing version.
+**Check for Updates** downloads the latest release from this repository and verifies its SHA-256 digest. Before restarting this Excel instance, the updater gives you three choices.
+
+- **Save all** saves your changes. Excel asks where to save each new workbook or edited read-only workbook. Canceling Save As stops the update and leaves the workbooks open. Any saves already completed are kept.
+- **Don't save any** closes every workbook in this instance and discards unsaved changes. After the restart, Excel reopens the last saved versions. Workbooks that were never saved are discarded.
+- **Cancel** stops the update and leaves all workbooks open with their edits intact.
+
+After Excel exits, a separate helper replaces the XLL at its existing path and reopens the saved workbooks. The add-in folder must be writable. If another Excel instance locks the XLL, the helper reopens the workbooks with the existing version.
 
 **Package Installer** accepts commands such as `list`, `install openpyxl`, `install "C:\downloads\some_package.whl"` and `uninstall -y openpyxl`. You can include the leading `pip`. The command goes directly to the embedded interpreter’s `-m pip`. The terminal shows the interpreter path, streamed output and exit code. Installed packages persist for that runtime. Restart Excel after replacing an imported package or installing a package that uses a startup `.pth` file.
 

@@ -23,7 +23,7 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def test(source):
+def test(source, action):
     url = "https://api.github.com/repos/sancarn/xll-python/releases/latest"
     release = json.loads(subprocess.check_output(["curl.exe", "--fail", "--silent", "--show-error", url], timeout=30))
     asset = next(a for a in release["assets"] if a["name"] == "PythonExcel.xll")
@@ -48,19 +48,17 @@ def test(source):
                     windows.append(h)
             win32gui.EnumWindows(visit,None)
             return windows
-        def press(button_id):
+        def press(label):
             def find():
-                for h in dialogs(proc.pid):
-                    if win32gui.GetWindowText(h)=="Python for Excel update":
-                        try: button=win32gui.GetDlgItem(h,button_id)
-                        except win32gui.error: button=None
-                        if button:
-                            win32gui.PostMessage(button,win32con.BM_CLICK,0,0)
-                            return True
-                        messages=[]
-                        win32gui.EnumChildWindows(h,lambda w,_:messages.append(win32gui.GetWindowText(w)),None)
-                        raise AssertionError(messages)
+                prompt = Desktop(backend="win32").window(process=proc.pid, title="Python for Excel update")
+                if prompt.exists(timeout=0):
+                    buttons = {w.window_text(): w for w in prompt.descendants()}
+                    assert {"Save all", "Don't save any", "Cancel"} <= buttons.keys(), list(buttons)
+                    win32gui.PostMessage(buttons[label].handle,win32con.BM_CLICK,0,0)
+                    return True
             wait_for(find,40)
+        def save_dialog():
+            return wait_for(lambda:next((h for h in dialogs(proc.pid) if win32gui.GetWindowText(h)=="Save As"),None))
         def replacement_pid():
             for p in psutil.process_iter(["pid","name","cmdline"]):
                 if (p.info["name"] or "").lower()=="excel.exe" and str(files[0]) in (p.info["cmdline"] or []):
@@ -71,36 +69,42 @@ def test(source):
             assert app.RegisterXLL(str(target))
             for file in files:
                 book=app.Workbooks.Add()
+                book.Worksheets(1).Range("A1").Value2="original"
                 book.SaveAs(str(file),51)
                 book.Worksheets(1).Range("A1").Value2="saved by updater"
                 del book
             app.Workbooks(csv.name).Close(False)
+            unsaved=app.Workbooks.Add()
+            unsaved.Worksheets(1).Range("A1").Value2="unsaved text"
             main=Desktop(backend="uia").window(handle=app.Hwnd)
             def click():
                 main.child_window(title="Python",control_type="TabItem").select()
                 main.child_window(title="Check for Updates",control_type="Button").invoke()
             click()
-            press(win32con.IDNO)
+            press("Cancel")
             wait_for(lambda:not list(base.glob("*.tmp")))
-            assert not app.ActiveWorkbook.Saved and digest(target)==before
-            print("PASS: declining restart left workbooks open, unsaved changes intact and XLL unchanged",flush=True)
-            unsaved=app.Workbooks.Add()
-            unsaved.Worksheets(1).Range("A1").Value2="unsaved text"
-            main=Desktop(backend="uia").window(handle=app.Hwnd)
-            click()
-            press(win32con.IDYES)
-            dialog=wait_for(lambda:next((h for h in dialogs(proc.pid) if win32gui.GetWindowText(h)=="Save As"),None))
-            win32gui.PostMessage(dialog,win32con.WM_CLOSE,0,0)
-            wait_for(lambda:not list(base.glob("*.tmp")))
+            assert app.Workbooks.Count == 3 and not app.Workbooks(files[0].name).Saved
             assert unsaved.Worksheets(1).Range("A1").Value2=="unsaved text" and digest(target)==before
-            unsaved.Close(False)
+            print("PASS: declining restart left workbooks open, unsaved changes intact and XLL unchanged",flush=True)
+            if action == "Save all":
+                click()
+                press(action)
+                win32gui.PostMessage(save_dialog(),win32con.WM_CLOSE,0,0)
+                wait_for(lambda:not list(base.glob("*.tmp")))
+                assert app.Workbooks.Count == 3
+                assert unsaved.Worksheets(1).Range("A1").Value2=="unsaved text" and digest(target)==before
+                print("PASS: canceling Save As kept the untitled workbook and its edits open",flush=True)
+                app.Workbooks(files[0].name).Worksheets(1).Range("A1").Value2="last edit"
             del unsaved
-            main=Desktop(backend="uia").window(handle=app.Hwnd)
-            print("PASS: canceling Save As kept the untitled workbook and its edits open",flush=True)
             click()
             app=None
             gc.collect()
-            press(win32con.IDYES)
+            press(action)
+            new_file = base/"New workbook.xlsx"
+            if action == "Save all":
+                dialog = Desktop(backend="win32").window(handle=save_dialog())
+                dialog.child_window(class_name="Edit", found_index=0).set_edit_text(str(new_file))
+                win32gui.PostMessage(dialog.handle,win32con.WM_COMMAND,win32con.IDOK,0)
             proc.wait(100)
             new_pid=wait_for(replacement_pid,35)
             def reconnect():
@@ -112,10 +116,14 @@ def test(source):
                             notice.child_window(title="Enable this add-in for this session only.",control_type="Button").invoke()
                 return connect(new_pid,files[0])
             restored=wait_for(reconnect,150)
-            for file in files:
-                assert restored.Workbooks(file.name).Worksheets(1).Range("A1").Value2=="saved by updater"
+            expected = ["last edit", "saved by updater"] if action == "Save all" else ["original", "original"]
+            for file, value in zip(files, expected):
+                assert restored.Workbooks(file.name).Worksheets(1).Range("A1").Value2==value
+            assert restored.Workbooks.Count == (3 if action == "Save all" else 2)
+            if action == "Save all":
+                assert restored.Workbooks(new_file.name).Worksheets(1).Range("A1").Value2=="unsaved text"
             assert digest(target)==sha
-            print("PASS: restarted Excel, verified release digest, reopened both edited workbooks including Unicode path",flush=True)
+            print(f"PASS: {action} restarted Excel with the expected workbooks and contents",flush=True)
         finally:
             if restored is not None:
                 restored.DisplayAlerts=False
@@ -131,4 +139,5 @@ def test(source):
 
 
 if __name__=="__main__":
-    test(Path(sys.argv[1]))
+    for action in ("Save all", "Don't save any"):
+        test(Path(sys.argv[1]), action)

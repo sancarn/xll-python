@@ -118,12 +118,11 @@ namespace PythonExcel
             bool handedOff = false;
             try
             {
-                if (MessageBox.Show(new Owner(), "Install " + version + "? This will save your workbooks, restart this Excel instance, " +
-                    "and reopen its workbooks. Excel will ask where to save new workbooks. Continue?", Caption,
-                    MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+                var choice = ChooseWorkbookAction(version);
+                if (choice != DialogResult.Yes && choice != DialogResult.No) return;
 
                 dynamic app = ExcelDnaUtil.Application;
-                plan.Files = SaveAndCollect(app, plan.Target);
+                plan.Files = PrepareWorkbooks(app, plan.Target, choice == DialogResult.Yes);
                 plan.Arguments(); // Validate the relaunch before closing anything.
                 using (var current = Process.GetCurrentProcess()) plan.ParentPid = current.Id;
                 helper = Process.Start(new ProcessStartInfo(HelperPath()) {
@@ -140,6 +139,16 @@ namespace PythonExcel
                 var child = helper;
                 child.Exited += (s,e) => Interlocked.Exchange(ref busy, 0);
                 child.EnableRaisingEvents = true;
+                if (choice == DialogResult.No)
+                {
+                    foreach (dynamic book in OpenWorkbooks(app))
+                    {
+                        int count = app.Workbooks.Count;
+                        book.Close(SaveChanges: false);
+                        if (app.Workbooks.Count >= count)
+                            throw new IOException("A workbook stayed open. The update was canceled.");
+                    }
+                }
                 handedOff = true;
                 try { app.Quit(); }
                 catch (COMException e) when ((uint)e.ErrorCode == 0x80010108) { return; }
@@ -176,20 +185,54 @@ namespace PythonExcel
             }
         }
 
-        static string[] SaveAndCollect(dynamic app, string target)
+        static DialogResult ChooseWorkbookAction(string version)
+        {
+            using (var dialog = new Form {
+                Text = Caption, FormBorderStyle = FormBorderStyle.FixedDialog,
+                AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                StartPosition = FormStartPosition.CenterParent, MinimizeBox = false, MaximizeBox = false,
+                ShowInTaskbar = false
+            })
+            {
+                var layout = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill,
+                    FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(12) };
+                layout.Controls.Add(new Label { AutoSize = true, Text = "Excel will restart to install " + version +
+                    ".\nSave changes to your open workbooks before restarting?", Margin = new Padding(3, 3, 3, 12) });
+                var buttons = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
+                buttons.Controls.Add(new Button { Text = "Save all", AutoSize = true, DialogResult = DialogResult.Yes });
+                buttons.Controls.Add(new Button { Text = "Don't save any", AutoSize = true, DialogResult = DialogResult.No });
+                var cancel = new Button { Text = "Cancel", AutoSize = true, DialogResult = DialogResult.Cancel };
+                buttons.Controls.Add(cancel);
+                layout.Controls.Add(buttons);
+                dialog.Controls.Add(layout);
+                dialog.CancelButton = cancel;
+                dialog.ActiveControl = cancel;
+                return dialog.ShowDialog(new Owner());
+            }
+        }
+
+        static List<object> OpenWorkbooks(dynamic app)
+        {
+            var books = new List<object>();
+            foreach (object book in app.Workbooks) books.Add(book);
+            return books;
+        }
+
+        static string[] PrepareWorkbooks(dynamic app, string target, bool save)
         {
             if (app.ProtectedViewWindows.Count != 0)
                 throw new IOException("Close the Protected View windows before restarting so you can choose how to reopen them.");
-            var books = new List<object>();
-            foreach (object book in app.Workbooks) books.Add(book);
-            foreach (dynamic book in books)
+            if (save)
             {
-                if (String.IsNullOrEmpty(book.Path) || (!book.Saved && book.ReadOnly))
+                foreach (dynamic book in OpenWorkbooks(app))
                 {
-                    book.Activate();
-                    if (!(bool)app.Dialogs[5].Show()) throw new OperationCanceledException(); // xlDialogSaveAs
+                    if (String.IsNullOrEmpty(book.Path) || (!book.Saved && book.ReadOnly))
+                    {
+                        book.Activate();
+                        if (!(bool)app.Dialogs[5].Show()) throw new OperationCanceledException(); // xlDialogSaveAs
+                    }
+                    else if (!book.Saved) book.Save();
                 }
-                else if (!book.Saved) book.Save();
             }
             var files = new List<string>();
             bool installed = false;
@@ -199,9 +242,9 @@ namespace PythonExcel
             string[] automatic = { app.StartupPath, app.AltStartupPath, Path.Combine((string)app.Path, "XLSTART") };
             foreach (dynamic book in app.Workbooks)
             {
-                if (!book.Saved || String.IsNullOrEmpty(book.Path))
+                if (save && (!book.Saved || String.IsNullOrEmpty(book.Path)))
                     throw new IOException("Excel could not save " + book.Name + ". The update was canceled.");
-                if (!automatic.Contains((string)book.Path, StringComparer.OrdinalIgnoreCase))
+                if (!String.IsNullOrEmpty(book.Path) && !automatic.Contains((string)book.Path, StringComparer.OrdinalIgnoreCase))
                     files.Add((string)book.FullName);
             }
             return files.ToArray();

@@ -26,7 +26,7 @@
       </div>
       <div class="demo" aria-label="Forecast worksheet and its Python function">
         <div class="sheet-window">
-          <div class="sheet-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></svg>Forecast.csv</div>
+          <div class="sheet-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></svg>Forecast.xlsx</div>
           <img src="assets/forecast.png" width="576" height="304" alt="FORECAST.UNITS multiplies 1,250 by 1.12 and returns 1,400 in the selected Excel cell.">
         </div>
         <div class="source-window"><div class="source-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-14-2 18"/></svg>forecast.py</div>
@@ -49,7 +49,7 @@
         <a href="#compiler" id="tab-compiler"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h8v7H3zM13 13h8v7h-8zM15 6h4v4M5 14v4h5"/></svg>XLL compiler</a>
       </nav>
       <article class="panel" id="worksheet">
-        <div class="description"><h3>Call Python from a cell</h3><p>Save the example file in a folder you trust. In <b>Python → Startup Folders</b>, add that folder under <b>Worksheet functions</b> and choose <b>Refresh</b>.</p><p>Enter <code>=FORECAST.UNITS(B3,C3)</code> in D3. With 1,250 units in B3 and 12% in C3, the cell returns 1,400.</p><a href="assets/forecast.py" download>Download forecast.py</a></div>
+        <div class="description"><h3>Call Python from a cell</h3><p>Save the example file in a folder you trust. In <b>Python → Startup Folders</b>, add that folder under <b>Worksheet functions</b> and choose <b>Refresh</b>.</p><p>Open the <a href="assets/Forecast.xlsx" download>starter workbook</a>. In D3, enter <code>=FORECAST.UNITS(B3,C3)</code> to get 1,400. Fill the formula down to D6 for the other regions.</p><a href="assets/forecast.py" download>Download forecast.py</a></div>
         <a class="capture" href="assets/worksheet.png" aria-label="Open full-size screenshot: Worksheet functions"><img src="assets/worksheet.png" width="992" height="453" loading="lazy" alt="Excel’s Python ribbon and the FORECAST.UNITS formula returning 1,400 in cell D3."></a>
       </article>
       <article class="panel" id="editor">
@@ -57,11 +57,11 @@
         <a class="capture" href="assets/editor.png" aria-label="Open full-size screenshot: Code editor"><img src="assets/editor.png" width="1290" height="690" loading="lazy" alt="The bundled Theia editor showing the Python function behind FORECAST.UNITS."></a>
       </article>
       <article class="panel" id="console">
-        <div class="description"><h3>Inspect a range from the console</h3><p>Open <b>Python → Console</b>. Import <code>Application</code> from <code>xll_python</code> to read and write cells in the current workbook.</p><p>Here, <code>Range("D3:D6").Value2</code> returns the four forecast values. Expand the list to inspect each row, or sum them in Python to get 4,894.</p><a href="https://github.com/sancarn/xll-python#python-console">Console guide</a></div>
+        <div class="description"><h3>Inspect a range from the console</h3><p>Open <b>Python → Console</b>. Import <code>Application</code> from <code>xll_python</code> to read and write cells in the current workbook.</p><p><code>Application.ActiveSheet.Range("D3:D6").Value2</code> returns the four forecast values. Expand the list to inspect each row, or sum them in Python to get 4,894.</p><a href="https://github.com/sancarn/xll-python#python-console">Console guide</a></div>
         <a class="capture" href="assets/console.png" aria-label="Open full-size screenshot: Console"><img src="assets/console.png" width="1290" height="690" loading="lazy" alt="Python console displaying the four rows returned by Excel and their sum of 4,894."></a>
       </article>
       <article class="panel" id="packages">
-        <div class="description"><h3>Install packages for Excel</h3><p>Choose <b>Python → Manage Packages</b>. Search PyPI by name and choose <b>Add</b> to install a package in the add-in’s Python environment.</p><p>The <b>Installed</b> tab lists versions and dependencies. Use <b>Advanced</b> to run a pip command or install a local wheel.</p><a href="https://github.com/sancarn/xll-python#load-the-add-in">Package guide</a></div>
+        <div class="description"><h3>Install packages for Excel</h3><p>Choose <b>Python → Manage Packages</b>. Search PyPI by name and choose <b>Add</b> to install a package in the add-in’s Python environment.</p><p>The <b>Installed</b> tab lists versions and dependencies. Use <b>Advanced</b> to run a pip command or install a local wheel.</p><a href="https://github.com/sancarn/xll-python#load-the-add-in">Add-in guide</a></div>
         <a class="capture" href="assets/packages.png" aria-label="Open full-size screenshot: Packages"><img src="assets/packages.png" width="1290" height="690" loading="lazy" alt="Manage Packages showing Add buttons for openpyxl, pandas, numpy and xlsxwriter."></a>
       </article>
       <article class="panel" id="compiler">

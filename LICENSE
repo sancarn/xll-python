@@ -1,0 +1,52 @@
+XLL Python Source-Available Licence, version 1.0
+Copyright (c) XLL Python contributors
+
+Scope and permission
+
+In this licence, the Framework means the project-authored XLL Python
+software, including its compiler, runtime, IDE integration and any
+modifications to those components. Each copyright holder grants you a
+worldwide, royalty-free, non-exclusive licence to use, study, copy and
+modify the Framework for any purpose, including business use, and to
+distribute it in source or binary form on the terms below. Private use
+and modification carry no obligation to distribute source.
+
+Distribution
+
+1. You may distribute the Framework itself only free of charge. This
+   applies to unchanged copies, forks, and renamed, rebuilt or
+   repackaged versions. You may sell an independently authored add-in
+   that includes the Framework as provided in LICENSE-PACKAGE-EXCEPTIONS.txt,
+   which is part of this licence.
+
+2. With every copy you distribute that includes all or part of the
+   Framework, preserve its copyright notices, include this licence and
+   LICENSE-PACKAGE-EXCEPTIONS.txt, and grant recipients the same rights
+   under these terms for the Framework and your modifications to it.
+   Additional product terms must preserve those rights.
+
+3. Give each recipient the matching Framework source, including any
+   modifications and build scripts needed to build the Framework portion,
+   free of charge. You may supply it with the distribution or provide a
+   working download link alongside the copy. A link to the exact upstream
+   version suffices for an unmodified Framework. Source for an independent
+   add-in is governed by the package exception.
+
+Separate licences
+
+The project-authored examples in examples/ and the code snippets in
+README.md are available under the Zero-Clause BSD licence in
+examples/LICENSE. Third-party components retain their own licences and
+notices. This licence applies only to rights in the Framework and does
+not restrict rights granted separately by upstream copyright holders.
+
+Warranty and liability
+
+To the fullest extent permitted by applicable law, the Framework is
+provided "as is", without warranty of any kind, express or implied,
+including warranties of merchantability, fitness for a particular
+purpose and non-infringement. To the fullest extent permitted by
+applicable law, the copyright holders and contributors shall have no
+liability for any claim, damages or other liability arising from the
+Framework, its use or its distribution, whether in contract, tort or
+otherwise.

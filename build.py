@@ -123,6 +123,9 @@ def main():
         for f in (out/"bridge.dll", WEB/"build/native/x64/WebView2Loader.dll"):
             z.write(f,f.name)
         z.write(ROOT/"examples/functions.py","examples/functions.py")
+        z.write(ROOT/"examples/LICENSE", "examples/LICENSE")
+        for name in ("LICENSE", "LICENSE-PACKAGE-EXCEPTIONS.txt"):
+            z.write(ROOT/name, name)
         for f in sorted((ROOT/"notices").glob("*")):
             z.write(f,"notices/"+f.name)
         for name in ("LICENSE.txt", "NOTICE.txt"):

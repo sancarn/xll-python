@@ -18,10 +18,10 @@ namespace PythonExcel
 <customUI xmlns='http://schemas.microsoft.com/office/2009/07/customui'>
   <ribbon><tabs><tab id='xllPythonTab' label='Python'>
     <group id='xllPythonRun' label='Python'>
-      <button id='xllPythonScript' label='Run Script' size='large' imageMso='MacroPlay' onAction='RunScript'/>
+      <button id='xllPythonScript' label='Run Script' size='large' imageMso='PlayMacro' onAction='RunScript'/>
       <button id='xllPythonMacro' label='Run Macro' size='large' imageMso='MacroPlay' onAction='RunMacro'/>
       <button id='xllPythonCompile' label='Compile to XLL' size='large' imageMso='FileSaveAs' onAction='OpenCompiler'/>
-      <button id='xllPythonConsole' label='Console' size='large' imageMso='MacroPlay' onAction='OpenConsole'/>
+      <button id='xllPythonConsole' label='Console' size='large' imageMso='ScriptEditor' onAction='OpenConsole'/>
       <button id='xllPythonIde' label='Open IDE' size='large' imageMso='VisualBasic' onAction='OpenIde'/>
     </group>
     <group id='xllPythonSetup' label='Environment'>

@@ -66,6 +66,7 @@ async function start(action, drop) {
   images.clear();
   directoryState.clear();
   $("name").value = project.name;
+  $("optimise").checked = project.optimise === true;
   $("folder").textContent = result.root;
   $("spec").value = "";
   $("filename").textContent = "File preview";
@@ -133,6 +134,7 @@ $("compile").onclick = () => run(async () => {
   const path = await host("compile", {name: project.name});
   status(path ? "Built " + path : "Project saved. Compilation cancelled.");
 });
+$("optimise").onchange = e => { project.optimise = e.target.checked; };
 $("name").oninput = e => { project.name = e.target.value; };
 
 async function showTab(tab) {

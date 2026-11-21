@@ -54,6 +54,7 @@ def drive_designer(python, support, source, template, output, env, wheel=None):
                 picker("openProject", source)
                 original = json.loads(source.read_text())
                 assert js("project") == original
+                assert not js("$('optimise').checked")
                 section("packages")
                 js("$('included').querySelector('button').click()")
                 picker("wheel", wheel)
@@ -67,6 +68,8 @@ def drive_designer(python, support, source, template, output, env, wheel=None):
                 idle()
                 js("document.querySelector('button[title=\"reports.py\"]').click()")
                 idle()
+                assert not js("$('optimise').checked")
+                click("optimise")
                 assert "def refresh" in js("$('source').textContent")
                 fill("role", "entry", "change")
                 assets = source.parent / "assets"
@@ -126,6 +129,7 @@ def drive_designer(python, support, source, template, output, env, wheel=None):
                 idle()
                 picker("openProject", manifest)
                 assert js("project") == saved
+                assert saved["optimise"] and js("$('optimise').checked")
             click("compile")
             choose_file(proc.pid, output)
             wait_for(lambda: js("!busy"), 90)

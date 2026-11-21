@@ -167,11 +167,19 @@ def main():
             app = wait_for(lambda: connect(proc.pid, book))
             app.DisplayAlerts = False
             app.Visible = True
-            assert app.RegisterXLL(str(template))
-            for output in outputs:
-                assert app.RegisterXLL(str(output))
+            assert app.RegisterXLL(str(outputs[0]))
             assert not (profile/"published").exists(), "Excel started Python before a formula or click"
             sheet = app.ActiveSheet
+            main = Desktop(backend="uia").window(handle=app.Hwnd)
+            main.child_window(title="First", control_type="TabItem").select()
+            assert not main.child_window(title="Python", control_type="TabItem").exists(timeout=.5)
+            sheet.Range("A1").Formula2 = "=Pkg.First(7)"
+            assert sheet.Range("A1").Value2 == 18
+            main.child_window(title="Refresh First", control_type="Button").invoke()
+            wait_for(lambda: sheet.Range("B1").Value2 == "First 1")
+            assert app.RegisterXLL(str(template))
+            for output in outputs[1:]:
+                assert app.RegisterXLL(str(output))
             for i, (label, expected) in enumerate([("First", 18), ("Second", 29)], 1):
                 cell = sheet.Range(f"A{i}")
                 cell.Formula2 = f"=Pkg.{label}(7)"
@@ -183,7 +191,6 @@ def main():
                     wait_for(lambda: topic.Value2 == i)
             pids = [int(sheet.Range(f"C{i}").Value2) for i in (1,2)]
             assert len(set([proc.pid, *pids])) == 3
-            main = Desktop(backend="uia").window(handle=app.Hwnd)
             for i, label in enumerate(("First", "Second"), 1):
                 main.child_window(title=label, control_type="TabItem").select()
                 control = main.child_window(title="Refresh "+label, control_type="Button").wrapper_object()

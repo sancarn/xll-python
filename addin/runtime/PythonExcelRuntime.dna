@@ -1,0 +1,3 @@
+<DnaLibrary Name="Python for Excel Runtime" RuntimeVersion="v4.0" ShadowCopyFiles="false">
+  <ExternalLibrary Path="PythonExcelRuntime.dll" Pack="true" ExplicitExports="true" LoadFromBytes="true" />
+</DnaLibrary>

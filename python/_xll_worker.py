@@ -16,7 +16,7 @@ def load(directory):
     # -I -S excludes the author's installed packages and the recipient's user site.
     support = str(Path(__file__).resolve().parent)
     sys.path.insert(0, support)
-    import _xll_host as host
+    from _xll_functions import _register
     import site
     site.addsitedir(str(directory / "packages"))
     sys.path.insert(1, str(directory / "src"))
@@ -33,7 +33,7 @@ def load(directory):
         local = [fn for fn in vars(module).values()
                  if inspect.isfunction(fn) and fn.__module__ == module.__name__]
         for fn in dict.fromkeys([*local, *getattr(module, "__excel_exports__", ())]):
-            host._register(fn, functions, entries)
+            _register(fn, functions, entries)
         for name, fn in vars(module).items():
             if name.startswith("_") or not inspect.isfunction(fn) or fn.__module__ != module.__name__:
                 continue
@@ -44,9 +44,7 @@ def load(directory):
             except TypeError:
                 continue
             commands[module.__name__ + "." + name] = fn
-    host._functions = functions
-    host._startup_entries = entries
-    return host, commands, entries
+    return functions, commands, entries
 
 
 def serve(root):
@@ -68,7 +66,10 @@ def serve(root):
             except FileExistsError:
                 pass
     os.chdir(work)
-    host, commands, _ = load(root)
+    functions, commands, _ = load(root)
+    from _xll_functions import _call, _encode, _invoke
+    from _xll_streams import Streams
+    subscriptions = Streams()
     from _xll_application import Session, active
     from concurrent.futures import ThreadPoolExecutor
     write = threading.Lock()
@@ -76,22 +77,34 @@ def serve(root):
     def respond(packet):
         request = packet["request"]
         try:
-            if request["op"] == "command":
+            op = request["op"]
+            value = None
+            if op == "command":
                 session = Session(request["excelPipe"])
                 try:
                     with active(session):
                         value = commands[request["name"]]()
                         if inspect.isawaitable(value):
                             asyncio.run(value)
-                    reply = {"value": None}
+                    value = None
                 finally:
                     session.close()
+            elif op == "call":
+                value = _invoke(functions[request["name"].upper()], request["args"])
+            elif op == "streamOpen":
+                generator = _call(functions[request["name"].upper()], request["args"])
+                subscriptions.open(request["id"], generator, _encode)
+            elif op == "streamRead":
+                value = subscriptions.read()
+            elif op == "streamClose":
+                subscriptions.close(request["id"])
             else:
-                reply = json.loads(host.dispatch(json.dumps(request)))
+                raise ValueError(f"Unknown worker operation: {op}")
+            reply = json.dumps({"id": packet["id"], "value": value}, allow_nan=False)
         except BaseException:
-            reply = {"failure": traceback.format_exc()}
+            reply = json.dumps({"id": packet["id"], "failure": traceback.format_exc()})
         with write:
-            protocol.write(json.dumps({"id": packet["id"], **reply}) + "\n")
+            protocol.write(reply + "\n")
             protocol.flush()
 
     # Stream reads and ribbon commands may wait for Excel while it calculates a formula.

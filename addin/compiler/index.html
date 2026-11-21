@@ -27,6 +27,8 @@
       <section id="info">
         <h1>Project information</h1>
         <label>Add-in name<input id="name" autocomplete="off"></label>
+        <label class="check"><input type="checkbox" id="optimise" aria-describedby="optimiseHint"> Optimise</label>
+        <small id="optimiseHint">Build with the runtime-only template. The first optimised build downloads it for offline reuse.</small>
         <div class="sectionTitle"><div><h2>Project files</h2><small id="folder"></small></div><div class="actions"><button id="addFiles">Add files</button><button id="refresh">Refresh files</button></div></div>
         <div class="workspace">
           <div class="tree" id="tree" aria-label="Project files"></div>

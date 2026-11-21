@@ -149,7 +149,8 @@ def publish(project_file, template, output):
         wheels = []
         for spec in project["packages"]:
             if spec.lower().endswith(".whl"):
-                wheel = (root / spec).resolve(strict=True)
+                wheel = root / spec
+                # Search beside the wheel the author selected, including a symlinked wheel.
                 if not wheel.is_file():
                     raise ValueError(f"Expected a wheel file: {spec}")
                 requirements.append(str(wheel))

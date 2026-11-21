@@ -124,6 +124,12 @@ def main():
                 for path in source.parent.glob("*.whl"):
                     path.rename(wheelhouse/path.name)
                 wheel = next(wheelhouse.glob("xll_fixture-*.whl"))
+                cached = base / wheel.name
+                wheel.rename(cached)
+                try:
+                    wheel.symlink_to(cached)
+                except OSError:  # Developer Mode is optional on the Windows test machine.
+                    shutil.copyfile(cached, wheel)
                 subprocess.run([python, "-I", ROOT/"tests/compiler_designer.py", source, template, output, wheel],
                                check=True, env=build_env)
                 subprocess.run([python, "-I", ROOT/"python/_xll_compile.py", source, template, output],

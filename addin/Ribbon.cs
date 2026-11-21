@@ -96,7 +96,7 @@ namespace PythonExcel
             output.Text="Running " + path + Environment.NewLine;
             try
             {
-                string result = (string)await Task.Run(() => Runtime.Request(new {op="script", path}));
+                string result = await Task.Run(() => ExcelObjects.RunScript(path));
                 if (!IsDisposed) output.AppendText(result.Replace("\r\n","\n").Replace("\n","\r\n") + "\r\nFinished.");
             }
             catch(Exception e) { Runtime.Log(e.Message); if (!IsDisposed) output.AppendText(e.Message); }

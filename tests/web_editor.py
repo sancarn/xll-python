@@ -78,6 +78,9 @@ def verify_console(base, pid, sheet):
         wait_for(lambda: js("transcript.childElementCount === 0"))
         run_code("record['values'][0]")
         assert rendered(".result") == str(pid)
+        run_code("from xll_python import Application\ncell_ref = Application.ActiveSheet.Range(\"T3\")")
+        run_code("cell_ref.Value2 = 73")
+        assert sheet.Range("T3").Value2 == 73
         cell = sheet.Range("N1")
         run_code("factor = 2\ndef scale(x, extra=1): return factor*x + extra")
         assert "=XLLPY.console.scale(x, extra)" in rendered(".entry:last-child .output")

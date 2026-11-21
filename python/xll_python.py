@@ -2,6 +2,8 @@
 from dataclasses import dataclass
 from typing import Literal
 
+from _xll_application import Application
+
 
 @dataclass(frozen=True)
 class Function:

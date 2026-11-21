@@ -19,6 +19,7 @@ namespace PythonExcel
         readonly string session = Guid.NewGuid().ToString("N");
         readonly WebView2 web = new WebView2 { Dock = DockStyle.Fill };
         readonly SemaphoreSlim requests = new SemaphoreSlim(1);
+        readonly ExcelObjects excel = new ExcelObjects();
         bool sessionOpen;
         volatile bool closed;
 
@@ -34,6 +35,7 @@ namespace PythonExcel
             Shown += async (s, e) => await Initialize();
             FormClosed += (s, e) => {
                 closed = true;
+                excel.Dispose();
                 if (sessionOpen)
                 {
                     try
@@ -82,7 +84,7 @@ namespace PythonExcel
         }
 
         object Call(string action, object args = null) =>
-            Runtime.Request(new { op = "repl", session, action, args });
+            Runtime.Request(new { op = "repl", session, action, args, excelPipe=excel.Name });
 
         void Send(object reply)
         {

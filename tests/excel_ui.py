@@ -160,13 +160,22 @@ def verify(app, pid, base, home):
 
     script=base/"interactive.py"
     script.write_text("from xll_probe import VALUE\namount = VALUE + 1\nprint('FROM_XLL', amount)\n",encoding="utf-8")
+    with script.open("a", encoding="utf-8") as f:
+        f.write("from xll_python import Application\n"
+                "book = Application.ActiveWorkbook\nsheet = Application.ActiveSheet\n"
+                "target = sheet.Range('T1:U2')\nother = Application.Workbooks.Call('Add')\n"
+                "try:\n    assert Application.ActiveWorkbook.Name == other.Name != book.Name\n"
+                "    target.Value2 = [[1, 2], [3, 4]]\n    assert target.Value2 == [[1, 2], [3, 4]]\n"
+                "    assert other.Worksheets(1).Range('T1').Value2 is None\n"
+                "finally:\n    other.Call('Close', False)\nprint('EXCEL_OBJECTS_OK')\n")
     if native_wheel:
         with script.open("a") as f:
             f.write("from markupsafe import _speedups\nassert _speedups.__file__.endswith('.pyd')\nprint('NATIVE_WHEEL_LOADED')\n")
     click_ribbon("Run Script")
     pick_file(script)
     output=window("Python output")
-    wait_for(lambda:"FROM_XLL 43" in read_console(output))
+    wait_for(lambda:"EXCEL_OBJECTS_OK" in read_console(output))
+    assert sheet.Range("U2").Value2 == 4
     if native_wheel:
         assert "NATIVE_WHEEL_LOADED" in read_console(output)
     close(output)

@@ -24,6 +24,25 @@ exports.activate = async context => {
     status.tooltip = environment.python;
     status.show();
 
+    function reportError(error) {
+        output.appendLine(error.message);
+        vscode.window.showErrorMessage(error.message);
+    }
+    context.subscriptions.push(vscode.workspace.onDidSaveTextDocument(doc => {
+        if (doc.uri.scheme === 'file' && path.extname(doc.uri.fsPath).toLowerCase() === '.py')
+            host('refreshSaved', { path: doc.uri.fsPath }).catch(reportError);
+    }));
+    let folderChanges = Promise.resolve();
+    context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(({ added, removed }) => {
+        for (const [folders, isAddition] of [[removed, false], [added, true]]) {
+            for (const { uri } of folders) {
+                if (uri.scheme !== 'file') continue;
+                folderChanges = folderChanges.then(() => host('workspaceFolder', { path: uri.fsPath, added: isAddition }))
+                    .catch(reportError);
+            }
+        }
+    }));
+
     const commands = vscode.commands;
     const debug = vscode.debug;
     let running = false;

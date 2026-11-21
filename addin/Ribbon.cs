@@ -56,11 +56,9 @@ namespace PythonExcel
             using (var dialog = new FolderWindow())
                 if (dialog.ShowDialog(new Owner()) == DialogResult.Retry)
                 {
-                    var settings = dialog.Selection;
-                    ExcelAsyncUtil.QueueAsMacro(() => Guard(() => {
-                        Functions.Load(settings, true);
-                        Runtime.SaveSettings(settings);
-                    }));
+                    var original = dialog.Original;
+                    var selection = dialog.Selection;
+                    ExcelAsyncUtil.QueueAsMacro(() => Guard(() => Runtime.SaveFolderSelection(original, selection, true)));
                 }
         });
 

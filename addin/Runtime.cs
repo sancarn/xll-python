@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -81,15 +82,82 @@ namespace PythonExcel
             return File.Exists(SettingsPath) ? Json.Deserialize<Settings>(File.ReadAllText(SettingsPath)) : new Settings();
         }
 
-        internal static void SaveSettings(Settings settings)
+        static string FolderKey(string path) => Path.GetFullPath(path).TrimEnd('\\', '/');
+
+        internal static bool SameFolder(string first, string second) =>
+            StringComparer.OrdinalIgnoreCase.Equals(FolderKey(first), FolderKey(second));
+
+        static void EditSettings(Action<Settings> change)
+        {
+            using (var mutex = new Mutex(false, @"Local\XllPython.StartupFolders"))
+            {
+                try { mutex.WaitOne(); } catch (AbandonedMutexException) { }
+                try
+                {
+                    var latest = LoadSettings();
+                    change(latest);
+                    WriteJson(SettingsPath, latest);
+                }
+                finally { mutex.ReleaseMutex(); }
+            }
+        }
+
+        internal static void SaveFolderSelection(Settings original, Settings selection, bool refresh)
+        {
+            string[] Apply(string[] latest, string[] before, string[] after)
+            {
+                if (latest.SequenceEqual(before, StringComparer.OrdinalIgnoreCase)) return after;
+                bool Contains(string[] paths, string path) => paths.Any(p => SameFolder(p, path));
+                return latest.Where(p => !Contains(before, p) || Contains(after, p))
+                    .Concat(after.Where(p => !Contains(before, p) && !Contains(latest, p))).ToArray();
+            }
+            void ApplySelection(Settings settings)
+            {
+                settings.folders = Apply(settings.folders, original.folders, selection.folders);
+                settings.packages = Apply(settings.packages, original.packages, selection.packages);
+            }
+            if (refresh)
+            {
+                var active = LoadSettings();
+                ApplySelection(active);
+                Functions.Load(active, true);
+            }
+            EditSettings(ApplySelection);
+        }
+
+        internal static void ChangeStartupFolder(string path, string kind, bool add)
+        {
+            if (add && !Directory.Exists(path)) throw new DirectoryNotFoundException(path);
+            EditSettings(settings => {
+                var paths = kind == "folders" ? settings.folders : settings.packages;
+                var updated = paths.ToList();
+                if (!add) updated.RemoveAll(p => SameFolder(p, path));
+                else if (!paths.Any(p => SameFolder(p, path))) updated.Add(path);
+                if (kind == "folders") settings.folders = updated.ToArray();
+                else settings.packages = updated.ToArray();
+
+                // Explorer already applied this edit. Replay only external membership changes on reopen.
+                string baseline = Path.Combine(Root, "IDE", "workspaces", "applied-defaults.json");
+                if (File.Exists(baseline))
+                {
+                    var state = Json.Deserialize<Dictionary<string, object>>(File.ReadAllText(baseline));
+                    var known = ((System.Collections.IList)state["folders"]).Cast<string>().Where(p => !SameFolder(p, path)).ToList();
+                    if (settings.folders.Concat(settings.packages).Any(p => SameFolder(p, path))) known.Add(path);
+                    state["folders"] = known;
+                    WriteJson(baseline, state);
+                }
+            });
+        }
+
+        static void WriteJson(string file, object value)
         {
             Directory.CreateDirectory(Root);
-            string temp = SettingsPath + "." + Guid.NewGuid().ToString("N");
-            File.WriteAllText(temp, Json.Serialize(settings), Encoding.UTF8);
+            string temp = file + "." + Guid.NewGuid().ToString("N");
+            File.WriteAllText(temp, Json.Serialize(value), Encoding.UTF8);
             try
             {
-                if (File.Exists(SettingsPath)) File.Replace(temp, SettingsPath, null);
-                else File.Move(temp, SettingsPath);
+                if (File.Exists(file)) File.Replace(temp, file, null);
+                else File.Move(temp, file);
             }
             finally { if (File.Exists(temp)) File.Delete(temp); }
         }

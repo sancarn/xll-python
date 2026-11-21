@@ -157,46 +157,153 @@ def verify_package_log(base):
         print("PASS: queued Browse and Advanced installs survived reopen, inventory and logs agree, failed install links to its log, live PyPI search returns metadata", flush=True)
 
 
-def verify_editor(ide, script, read_console, action, pick_file):
-    base=script.parent
-    with page(base/"profile"/"WebView2","https://vscode.dev/") as (js, send):
-        _exercise_editor(ide, base, read_console, action, pick_file, js, send)
+
+def close_during_attach(base, close):
+    import socket
+
+    # Accept the real debug connection, but never send configurationDone.
+    with socket.create_server(("127.0.0.1", 0)) as adapter:
+        adapter.settimeout(15)
+        with page(base / "profile" / "IdeWebView2", "http://xll-") as (js, _):
+            def initialized():
+                js("[...document.querySelectorAll('button')].find(b => b.innerText.includes('Yes, I trust'))?.click()")
+                return "Python 3.13" in js("document.body.innerText").replace("\xa0", " ")
+            wait_for(initialized)
+            request = dict(id=-1, operation="connect", args=dict(port=adapter.getsockname()[1], token="test"))
+            js(f"window.chrome.webview.postMessage({json.dumps(request)})")
+            client, _ = adapter.accept()
+            with client:
+                close()
+                client.settimeout(15)
+                try:
+                    while client.recv(4096):
+                        pass
+                except ConnectionResetError:
+                    pass
 
 
-def _exercise_editor(ide, base, read_console, action, pick_file, js, send):
-    def shortcut(key):
-        vk=ord(key.upper())
-        for typ in ("keyDown","keyUp"):
-            send("Input.dispatchKeyEvent",type=typ,key=key,code="Key"+key.upper(),modifiers=2,
-                 windowsVirtualKeyCode=vk,nativeVirtualKeyCode=vk)
-    try:
-        wait_for(lambda:js("!!document.querySelector('.monaco-workbench')"),75)
-        print("PASS: hosted vscode.dev workbench rendered inside Excel WebView2",flush=True)
-        edited=base/"editor_saved.py"
-        edited.write_text("print('before edit')\n",encoding="utf-8")
+def verify_editor(base, pid, close):
+    """Exercise the shipped workbench and a synchronous cell in this Excel instance."""
+    import queue
+    import threading
+    import pythoncom
+    from excel_smoke import connect
+
+    script = base / "scripts" / "ide_runner.py"
+    helper = base / "packages" / "ide_helper.py"
+    helper.write_text("def twice(value):\n    factor = 2\n    return value * factor\n")
+    source = ("from xll_python import function\nfrom ide_helper import twice\n"
+              "@function(name='PY.IDE_DOUBLE')\ndef calc(value: float): return twice(value)\n")
+    script.write_text(source)
+    (base / "scripts" / "ide_streams.py").write_text(
+        "from xll_python import function\nfrom ide_helper import twice\n"
+        "from pathlib import Path\nimport asyncio, time\n"
+        "@function(name='PY.IDE_SYNC')\ndef sync():\n"
+        "    value = 1\n    flag = Path(__file__).with_name('ide-sync')\n"
+        "    while True:\n        if flag.exists():\n            flag.unlink()\n            value = twice(17)\n"
+        "        yield value\n        time.sleep(.15)\n"
+        "@function(name='PY.IDE_ASYNC')\nasync def asyn():\n"
+        "    value = 1\n    flag = Path(__file__).with_name('ide-async')\n"
+        "    while True:\n        if flag.exists():\n            flag.unlink()\n            value = twice(18)\n"
+        "        yield value\n        await asyncio.sleep(.15)\n"
+    )
+    result = queue.Queue()
+
+    def calculate(value):
+        pythoncom.CoInitialize()
+        try:
+            app = connect(pid, base / "book.csv")
+            cell = app.ActiveSheet.Range("Q9")
+            cell.Formula2 = f"=PY.IDE_DOUBLE({value})"
+            result.put(cell.Value2)
+        except BaseException as error:
+            result.put(error)
+        finally:
+            pythoncom.CoUninitialize()
+
+    with page(base / "profile" / "IdeWebView2", "http://xll-") as (js, send):
+        def body():
+            return js("document.body.innerText").replace("\xa0", " ")
+        def key(name, vk, modifiers=0):
+            for event in ("keyDown", "keyUp"):
+                send("Input.dispatchKeyEvent", type=event, key=name, windowsVirtualKeyCode=vk,
+                     nativeVirtualKeyCode=vk, modifiers=modifiers)
+        def select(text, command=False):
+            key("F1", 112) if command else key("p", 80, 2)
+            wait_for(lambda: js("!!document.querySelector('.quick-input-widget input:focus')"), 8)
+            send("Input.insertText", text=text)
+            wait_for(lambda: js("document.querySelector('.quick-input-list')?.innerText ?? ''").find(text) >= 0)
+            key("Enter", 13)
+        def initialized():
+            js("""[...document.querySelectorAll('button')].find(b => b.innerText.includes('Yes, I trust'))?.click()""")
+            return f"Excel {pid} | Python 3.13" in body()
+
+        wait_for(initialized)
         send("Page.bringToFront")
-        open_file="Array.from(document.querySelectorAll('button')).find(e=>e.textContent.trim()==='Open File...')"
-        wait_for(lambda:js("Boolean("+open_file+")"))
-        send("Runtime.evaluate",expression=open_file+".click()",userGesture=True)
-        pick_file(edited,True)
-        wait_for(lambda:js("document.title").find("editor_saved.py")>=0,25)
-        wait_for(lambda:ide.child_window(title=str(edited),control_type="Text").exists(timeout=.2),10)
-        shortcut("a")
-        send("Input.insertText",text="print('VS_CODE_SAVE_AND_RUN')\n")
-        shortcut("s")
-        def saved():
-            if "VS_CODE_SAVE_AND_RUN" in edited.read_text():
-                return True
-            for name in ("Save changes","Allow","Allow this time"):
-                prompt=ide.child_window(title=name,control_type="Button")
-                if prompt.exists(timeout=.1):
-                    prompt.invoke()
-            return False
-        wait_for(saved,15)
-        action("Run saved script")
-        wait_for(lambda:"VS_CODE_SAVE_AND_RUN" in read_console(ide))
-        print("PASS: open local file from VS Code, edit, save, automatically select and run in Excel CPython",flush=True)
-    except Exception:
-        print("Editor state:",js("document.body.innerText.slice(-1800)"),flush=True)
-        raise
+        select("Excel: Refresh Worksheet Functions", True)
+        wait_for(lambda: "Refreshed Excel worksheet functions." in body())
+        app = connect(pid, base / "book.csv")
+        sheet = app.ActiveSheet
+        sheet.Range("R8").Formula2 = "=PY.IDE_SYNC()"
+        sheet.Range("R9").Formula2 = "=PY.IDE_ASYNC()"
+        wait_for(lambda: sheet.Range("R8:R9").Value2 == ((1.,), (1.,)))
+        select(script.name)
+        wait_for(lambda: "Ln " in body() and script.name in body())
+        key("End", 35, 2)
+        send("Input.insertText", text="import xll_python\nxll_python.")
+        key(" ", 32, 2)
+        wait_for(lambda: {"Reference", "ExcelError"} <= set(body().splitlines()))
+        key("Escape", 27)
+        key("a", 65, 2)
+        send("Input.insertText", text=source + "if __name__ == '__main__':\n"
+             "    from xll_python import Application\n"
+             "    Application.ActiveSheet.Range('U3').Value2 = 'IDE'\n"
+             "print('IDE_RUN', __import__('os').getpid())\n")
+        key("F5", 116, 2)
+        wait_for(lambda: f"IDE_RUN {pid}" in body())
+        assert "print('IDE_RUN'" in script.read_text()
+        assert sheet.Range("U3").Value2 == "IDE"
+        print("PASS: Pyright completed xll_python; Run saved the active editor and executed inside Excel.", flush=True)
 
+        select(script.name)
+        key("End", 35, 2)
+        key("ArrowUp", 38)
+        key("F9", 120)
+        wait_for(lambda: js("!!document.querySelector('.cgmr.codicon-debug-breakpoint')"))
+        key("F5", 116)
+        wait_for(lambda: "PAUSED ON BREAKPOINT" in body())
+        key("F5", 116)
+        wait_for(lambda: js("document.querySelector('#outputView')?.textContent ?? ''").count(f"IDE_RUN\xa0{pid}") >= 2)
+        wait_for(lambda: "PAUSED ON BREAKPOINT" not in body())
+        print("PASS: F5 stopped in the active script and continued in the same Excel process.", flush=True)
+
+        select(helper.name)
+        wait_for(lambda: "return value * factor" in body())
+        key("End", 35, 2)
+        key("ArrowUp", 38)
+        key("F9", 120)
+        wait_for(lambda: js("!!document.querySelector('.cgmr.codicon-debug-breakpoint')"))
+        select("Excel: Debug Worksheet Functions", True)
+        wait_for(lambda: "RUNNING" in body())
+        for signal, value, cell in (("ide-sync", 17, "R8"), ("ide-async", 18, "R9")):
+            (base / "scripts" / signal).touch()
+            wait_for(lambda: "PAUSED ON BREAKPOINT" in body() and "factor:" in body())
+            key("F5", 116)
+            wait_for(lambda: sheet.Range(cell).Value2 == value * 2)
+        sheet.Range("R8:R9").ClearContents()
+        print("PASS: attached to pre-existing sync and async generator workers.", flush=True)
+        for value in (21, 22):
+            threading.Thread(target=calculate, args=(value,), daemon=True).start()
+            wait_for(lambda: "PAUSED ON BREAKPOINT" in body())
+            wait_for(lambda: "factor:" in body() and str(value) + ".0" in body())
+            if value == 21:
+                key("F5", 116)
+                assert result.get(timeout=12) == 42
+                key("F5", 116, 8)
+                wait_for(lambda: "RUNNING" not in body())
+                select("Excel: Debug Worksheet Functions", True)
+                wait_for(lambda: "RUNNING" in body())
+            else:
+                close()
+                assert result.get(timeout=12) == 44
+    print("PASS: inspected a helper in a second root, continued, stopped, reattached and closed while paused.", flush=True)

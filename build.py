@@ -63,7 +63,7 @@ def payload(inputs):
     return runtime
 
 
-def embed_runtime(xll, runtime):
+def embed_archive(xll, name, archive):
     """Store the install archive as an ordinary Win32 RCDATA resource."""
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     begin = kernel.BeginUpdateResourceW
@@ -74,11 +74,11 @@ def embed_runtime(xll, runtime):
                        wintypes.WORD, ctypes.c_void_p, wintypes.DWORD]
     end = kernel.EndUpdateResourceW
     end.argtypes = [wintypes.HANDLE, wintypes.BOOL]
-    data = runtime.read_bytes()
+    data = archive.read_bytes()
     handle = begin(str(xll), False)
     if not handle:
         raise ctypes.WinError(ctypes.get_last_error())
-    if not update(handle, 10, "PYTHON_RUNTIME", 0, data, len(data)):
+    if not update(handle, 10, name, 0, data, len(data)):
         error = ctypes.WinError(ctypes.get_last_error())
         end(handle, True)
         raise error
@@ -91,6 +91,8 @@ def main():
     with concurrent.futures.ThreadPoolExecutor(5) as pool:
         archives = list(pool.map(prepare, INPUTS.items()))
     runtime = payload(archives)
+    from ide_build import bundle
+    ide = bundle(ROOT, BUILD, archives)
     installer = Path(os.environ["ProgramFiles(x86)"]) / "Microsoft Visual Studio/Installer/vswhere.exe"
     vs = Path(subprocess.check_output([installer, "-latest", "-products", "*", "-requires",
               "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", "-property", "installationPath"], text=True).strip())
@@ -110,6 +112,11 @@ def main():
     with zipfile.ZipFile(support,"w",zipfile.ZIP_DEFLATED) as z:
         for f in sorted((ROOT/"python").glob("*.py")):
             z.write(f,f.name)
+        wheel = next(p for p in archives if p.name.startswith("debugpy-"))
+        with zipfile.ZipFile(wheel) as src:
+            for item in src.infolist():
+                if not item.is_dir():
+                    z.writestr(item.filename, src.read(item))
         for folder in ("repl", "packages"):
             for f in sorted((ROOT/"addin"/folder).iterdir()):
                 z.write(f, folder + "/" + f.name)
@@ -121,7 +128,7 @@ def main():
         for name in ("LICENSE.txt", "NOTICE.txt"):
             z.write(WEB/name, "notices/WebView2-"+name)
     manifest = out/"versions.txt"
-    manifest.write_text("\n".join(sha256(f.read_bytes()).hexdigest() for f in (runtime,support)))
+    manifest.write_text("\n".join(sha256(f.read_bytes()).hexdigest() for f in (runtime,support,ide)))
     refs = ["System.dll","System.Core.dll","System.Drawing.dll","System.Windows.Forms.dll",
             "System.Web.Extensions.dll","System.IO.Compression.dll","System.Net.Http.dll","Microsoft.CSharp.dll"]
     csc = vs/"MSBuild/Current/Bin/Roslyn/csc.exe"
@@ -144,7 +151,8 @@ def main():
     DIST.mkdir(exist_ok=True)
     run(vs/"MSBuild/Current/Bin/MSBuild.exe", ROOT/"addin/pack.proj", "/nologo", "/verbosity:minimal")
     artifact = DIST / "PythonExcel.xll"
-    embed_runtime(out/"PythonExcel-packed.xll", runtime)
+    embed_archive(out/"PythonExcel-packed.xll", "PYTHON_RUNTIME", runtime)
+    embed_archive(out/"PythonExcel-packed.xll", "EXCEL_IDE", ide)
     os.replace(out/"PythonExcel-packed.xll", artifact)
     print(artifact)
 

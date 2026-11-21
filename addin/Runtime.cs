@@ -96,11 +96,11 @@ namespace PythonExcel
 
         static Stream OpenArchive(string resource)
         {
-            if (resource != "runtime")
+            if (resource == "support")
                 return Assembly.GetExecutingAssembly().GetManifestResourceStream(resource + ".zip");
             var module = GetModuleHandle(ExcelDna.Integration.ExcelDnaUtil.XllPath);
             if (module == IntPtr.Zero) throw new Win32Exception();
-            var entry = FindResource(module, "PYTHON_RUNTIME", new IntPtr(10));
+            var entry = FindResource(module, resource == "ide" ? "EXCEL_IDE" : "PYTHON_RUNTIME", new IntPtr(10));
             if (entry == IntPtr.Zero) throw new Win32Exception();
             var data = LockResource(LoadResource(module, entry));
             if (data == IntPtr.Zero) throw new InvalidDataException("Cannot read the embedded Python runtime.");
@@ -153,6 +153,19 @@ namespace PythonExcel
             info.EnvironmentVariables["PYTHONUTF8"] = "1";
             info.EnvironmentVariables["PYTHONNOUSERSITE"] = "1";
             return info;
+        }
+
+        internal static string InstallIde()
+        {
+            string hash;
+            using (var reader = new StreamReader(Assembly.GetExecutingAssembly().GetManifestResourceStream("versions.txt")))
+                hash = reader.ReadToEnd().Split('\n')[2].Trim();
+            using (var mutex = new Mutex(false, @"Local\XllPython.Ide." + hash))
+            {
+                try { mutex.WaitOne(); } catch (AbandonedMutexException) { }
+                try { return Unpack("ide", hash); }
+                finally { mutex.ReleaseMutex(); }
+            }
         }
 
         static void Install()

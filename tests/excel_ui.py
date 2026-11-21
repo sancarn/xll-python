@@ -183,39 +183,11 @@ def verify(app, pid, base, home):
 
     click_ribbon("Open IDE")
     ide=window("Python IDE")
-    # Use the separately named native target selector for files opened through workspace folders.
-    def choose():
-        pythoncom.CoInitialize()
-        try: ide.child_window(title="Choose script…",control_type="Button").invoke()
-        finally: pythoncom.CoUninitialize()
-    threading.Thread(target=choose,daemon=True).start()
-    pick_file(script)
-    def action(label):
-        ide.child_window(title=label,control_type="Button").invoke()
-    action("Arm breakpoint")
-    action("Run saved script")
-    wait_for(lambda:"interactive.py" in read_console(ide) and "line 1 " in read_console(ide))
-    action("Step")
-    wait_for(lambda:"line 2 " in read_console(ide))
-    action("Continue")
-    wait_for(lambda:"FROM_XLL 43" in read_console(ide))
-    edit=next(e for e in ide.descendants(control_type="Edit") if not e.iface_value.CurrentIsReadOnly
-              and e.element_info.class_name.startswith("WindowsForms10.EDIT"))
-    edit.set_edit_text("=XLLPY.scale(11)")
-    action("Evaluate")
-    wait_for(lambda:"=XLLPY.scale(11) = 22" in read_console(ide))
-    print("PASS: IDE breakpoint, locals, step, resume, run and Excel formula evaluation",flush=True)
-    threading.Thread(target=choose,daemon=True).start()
-    pick_file(Path(__file__).resolve().parents[1]/"examples/functions.py")
-    action("Arm breakpoint")
-    edit.set_edit_text("=XLLPY.scale(19)")
-    action("Evaluate")
-    wait_for(lambda:"scale line" in read_console(ide) and '"value":"19.0"' in read_console(ide))
-    action("Continue")
-    wait_for(lambda:"=XLLPY.scale(19) = 38" in read_console(ide))
-    print("PASS: paused a live registered worksheet function, inspected its arguments and returned its result to Excel",flush=True)
-    if os.environ.get("XLL_WEB_TEST"):
-        from web_editor import verify_editor
-        verify_editor(ide,script,read_console,action,pick_file)
-    close(ide)
-
+    from web_editor import close_during_attach, verify_editor
+    def close_ide():
+        win32gui.PostMessage(ide.handle, win32con.WM_SYSCOMMAND, win32con.SC_CLOSE, 0)
+    close_during_attach(base, close_ide)
+    wait_for(lambda: not hwnd_for("Python IDE"))
+    click_ribbon("Open IDE")
+    ide = window("Python IDE")
+    verify_editor(base, pid, close_ide)

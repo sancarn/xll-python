@@ -103,22 +103,22 @@ Enter `21` in A1 and `=XLLPY.console.double(A1)` in B1. B1 shows **42**. Redefin
 
 Public functions defined in the console with fixed positional parameters are available in every workbook in that Excel instance. Use a leading underscore for a private helper. A startup function with the same Excel name takes precedence. Deleting the definition or closing the console removes the worksheet function. To keep a function across Excel sessions, save it in a startup folder with `@function(name="XLLPY.console.double")` to keep the same formula.
 
-## VS Code web IDE
+## Excel Python IDE
 
-**Open IDE** hosts the live **vscode.dev** editor in WebView2. This feature needs internet access to the editor and the Microsoft Edge WebView2 Runtime. The interpreter, worksheet registration, script runner and pip bootstrap work independently of the editor.
+Choose **Python → Open IDE** to open the bundled Eclipse Theia workbench. Explorer shows the worksheet folders and package links from **Startup Folders** together. The status bar identifies the Excel process and its Python version. The editor, Python highlighting, and Pyright completions for your modules, installed packages, and `xll_python` work offline with WebView2.
 
-1. Use VS Code’s **File → Open File** to select a local Python file. The native toolbar displays the selected path. If you opened a folder or switched editor tabs, use **Choose script** to select the execution target shown in the toolbar.
-2. Edit and **save** in VS Code, then choose **Run saved script**. The output pane shows the result from Excel’s embedded interpreter.
-3. To debug a script or worksheet function, choose its source file, set a **Breakpoint line**, and select **Arm breakpoint**. Use line **0** to pause on its first executable line. Run the script, evaluate a registered function, or recalculate its worksheet cell. The debugger shows the source line and local variables. Use **Step**, **Continue** or **Detach**. Closing the IDE releases a paused call.
-4. Enter an expression such as `=XLLPY.scale(11)` in **Excel formula** and select **Evaluate**. Excel evaluates it in the active workbook. The IDE displays the result without writing to a cell. Use **Startup Folders → Refresh** to reload changes to startup function definitions.
+- Use the editor's **Run** button or **Ctrl+F5** to save and run the active Python file in that Excel process. Read its output or traceback in **Output → Excel Python**.
+- Click the gutter or press **F9** to toggle a breakpoint. Press **F5** in a Python editor to debug that file. Use the **Run** menu to step or continue, and the **Debug** view to inspect stack frames and variables.
+- To debug a worksheet calculation, open the command palette with **F1**, choose **Excel: Debug Worksheet Functions**, then recalculate the cell in Excel. Breakpoints also work in imported helpers. **Stop** detaches the debugger and lets the calculation finish.
+- After editing a registered function, use **Excel: Refresh Worksheet Functions** in the command palette to save changes, reload definitions, and recalculate. Reopen the IDE after changing the configured folders.
 
-The debugger controls belong to the XLL’s IDE window. They can inspect the live interpreter even when a synchronous worksheet call has paused Excel’s calculation thread.
+The first IDE launch extracts the bundled workbench and Node.js helper. The helper runs locally for the lifetime of the window.
 
 ## Build and verify
 
 Each push to `main` runs a Windows GitHub Actions build. The workflow checks the packaged runtime and restart helper, then publishes the XLL with a versioned tag and SHA-256 digest. Users on v0.1.0 can install the latest release manually once to get the update button.
 
-On Windows x64, install Python 3.10 or later and Visual Studio Build Tools with desktop C++ tools, MSBuild, the C# compiler and .NET Framework 4.8 targeting support. From the repository root run:
+On Windows x64, install Python 3.10 or later and Visual Studio Build Tools with desktop C++ tools, their x64 Spectre-mitigated libraries, MSBuild, the C# compiler and .NET Framework 4.8 targeting support. From the repository root run:
 
 ```powershell
 python build.py

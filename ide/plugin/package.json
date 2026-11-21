@@ -1,0 +1,33 @@
+{
+  "name": "excel-python",
+  "publisher": "xll-python",
+  "displayName": "Excel Python",
+  "version": "1.0.0",
+  "engines": { "vscode": "^1.85.0" },
+  "main": "./extension.js",
+  "activationEvents": ["*"],
+  "contributes": {
+    "commands": [
+      { "command": "excel.run", "title": "Excel: Run Current Python File", "icon": "$(play)" },
+      { "command": "excel.debugFile", "title": "Excel: Debug Current Python File" },
+      { "command": "excel.attach", "title": "Excel: Debug Worksheet Functions" },
+      { "command": "excel.refresh", "title": "Excel: Refresh Worksheet Functions" }
+    ],
+    "menus": {
+      "editor/title": [{ "command": "excel.run", "when": "resourceLangId == python", "group": "navigation" }]
+    },
+    "keybindings": [
+      { "command": "excel.run", "key": "ctrl+f5", "when": "editorLangId == python && !inDebugMode" },
+      { "command": "excel.debugFile", "key": "f5", "when": "editorLangId == python && !inDebugMode" }
+    ],
+    "breakpoints": [{ "language": "python" }],
+    "debuggers": [{
+      "type": "excel-python", "label": "Excel Python", "languages": ["python"],
+      "configurationAttributes": { "attach": { "properties": {} } },
+      "initialConfigurations": [
+        { "type": "excel-python", "name": "Debug Current File in Excel", "request": "attach", "currentFile": true },
+        { "type": "excel-python", "name": "Debug Worksheet Functions", "request": "attach" }
+      ]
+    }]
+  }
+}

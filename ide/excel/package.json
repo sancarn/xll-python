@@ -1,0 +1,8 @@
+{
+  "name": "excel-workbench",
+  "private": true,
+  "version": "1.0.0",
+  "theiaExtensions": [
+    { "frontend": "frontend.js", "backend": "backend.js" }
+  ]
+}

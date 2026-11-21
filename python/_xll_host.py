@@ -28,13 +28,27 @@ from _xll_streams import Streams
 
 
 _functions = {}
-_streams = Streams()
 _startup_entries = []
 _managed_paths = []
 _script_lock = threading.RLock()
 _capture = threading.local()
+_debug_session = None
 _debug_lock = threading.Lock()
-_debug = None
+
+
+_traced = threading.local()
+
+
+def _trace_worker():
+    session = _debug_session
+    if session is not None and getattr(_traced, "session", None) is not session:
+        import debugpy
+        if debugpy.is_client_connected():
+            debugpy.debug_this_thread()
+            _traced.session = session
+
+
+_streams = Streams(_trace_worker)
 
 
 class _Output:
@@ -375,49 +389,6 @@ def _script(path):
         return stream.getvalue()
 
 
-class _Debugger:
-    def __init__(self, path, line):
-        self.path = os.path.normcase(os.path.abspath(path))
-        self.line = line
-        self.step = False
-        self.condition = threading.Condition()
-        self.state = dict(status="armed")
-        self.stopped = False
-
-    def trace(self, frame, event, arg):
-        if self.stopped or os.path.normcase(frame.f_code.co_filename) != self.path:
-            return None
-        if event == "line" and (self.step or self.line == 0 or frame.f_lineno == self.line):
-            with self.condition:
-                if self.stopped:
-                    return None
-                self.state = dict(status="paused", line=frame.f_lineno, function=frame.f_code.co_name,
-                                  source=linecache.getline(frame.f_code.co_filename, frame.f_lineno).strip(),
-                                  locals={k: _preview(v) for k, v in frame.f_locals.items() if not k.startswith("__")})
-                self.condition.wait_for(lambda: self.state["status"] != "paused")
-        return self.trace
-
-    def command(self, command):
-        with self.condition:
-            if command == "stop":
-                self.stopped = True
-            elif self.state["status"] != "paused":
-                return
-            self.step = command == "step"
-            if self.line == 0:
-                self.line = -1
-            self.state = dict(status="detached" if self.stopped else "running")
-            self.condition.notify_all()
-
-
-def _preview(value):
-    import reprlib
-    try:
-        return reprlib.repr(value)
-    except Exception:
-        return "<unavailable>"
-
-
 def _execute(operation, request):
     registration = None
     if operation in ("call", "streamOpen"):
@@ -432,27 +403,14 @@ def _execute(operation, request):
         if operation == "streamOpen":
             _streams.open(request["id"], _call(registration, request["args"]), _encode)
             return
-    with _debug_lock:
-        debug = _debug
-        path = request["path"] if operation == "script" else registration[0].__code__.co_filename
-        if debug and debug.path == os.path.normcase(os.path.abspath(path)) and debug.state["status"] == "armed":
-            debug.state = dict(status="running")
-        else:
-            debug = None
-    previous = sys.gettrace()
-    try:
-        if debug:
-            sys.settrace(debug.trace)
-        return _script(path) if operation == "script" else _invoke(registration, request["args"])
-    finally:
-        if debug:
-            sys.settrace(previous)
-            with debug.condition:
-                debug.state = dict(status="finished")
+    _trace_worker()
+    if operation == "script":
+        return _script(request["path"])
+    return _invoke(registration, request["args"])
 
 
 def dispatch(message):
-    global _debug, _worksheet_console
+    global _debug_session, _worksheet_console
     try:
         req = json.loads(message)
         op = req["op"]
@@ -500,18 +458,36 @@ def dispatch(message):
             value = None
         elif op == "streamRead":
             value = _streams.read()
-        elif op == "arm":
+        elif op == "ideEnvironment":
+            value = dict(paths=sys.path.copy(), version=sys.version.split()[0])
+        elif op == "ideConnect":
+            from debugpy._vendored import force_pydevd
+            import pydevd
+            # The adapter authenticates to the embedded interpreter using its
+            # --server-access-token. debugpy.connect sets the opposite token.
             with _debug_lock:
-                if _debug:
-                    _debug.command("stop")
-                linecache.clearcache()
-                _debug = _Debugger(req["path"], req["line"])
+                if _debug_session is not None:
+                    pydevd.stoptrace()
+                # The workbench waits for the DAP attach response before running a file.
+                # Release this lock even when the adapter never finishes configuration.
+                try:
+                    pydevd.settrace("127.0.0.1", port=req["port"], access_token=req["token"],
+                                    suspend=False, patch_multiprocessing=False, notify_stdin=False,
+                                    wait_for_ready_to_run=False)
+                except Exception:
+                    pydevd.stoptrace()
+                    _debug_session = None
+                    raise
+                _debug_session = (req["session"], req["token"])
             value = None
-        elif op == "debug":
+        elif op == "ideDisconnect":
             with _debug_lock:
-                if _debug and "command" in req:
-                    _debug.command(req["command"])
-                value = _debug.state if _debug else dict(status="idle")
+                if _debug_session and _debug_session[0] == req["session"]:
+                    from debugpy._vendored import force_pydevd
+                    import pydevd
+                    pydevd.stoptrace()
+                    _debug_session = None
+            value = None
         else:
             raise ValueError(f"Unknown operation: {op}")
         return json.dumps(dict(value=value), allow_nan=False)

@@ -93,6 +93,8 @@ namespace PythonExcel
             }
         }
 
+        internal bool IsClosing { get { lock (lifetime) return closing; } }
+
         internal void Shutdown()
         {
             lock (lifetime)

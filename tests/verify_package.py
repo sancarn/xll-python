@@ -25,6 +25,7 @@ def main():
     try:
         for name, kind, source in [
             ("PYTHON_RUNTIME", ctypes.cast(10, wintypes.LPCWSTR), root/".build/runtime.zip"),
+            ("EXCEL_IDE", ctypes.cast(10, wintypes.LPCWSTR), root/".build/ide.zip"),
             ("PYTHONEXCEL", "ASSEMBLY", root/".build/pack/PythonExcel.dll"),
         ]:
             entry = kernel.FindResourceW(module, name, kind)

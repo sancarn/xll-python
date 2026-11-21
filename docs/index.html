@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#102f28">
+  <meta name="description" content="Write worksheet functions in Python, inspect cells in a console, and package your own XLL for desktop Excel on Windows.">
+  <title>XLL Python | Python for desktop Excel</title>
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="site.css">
+  <script defer src="tour.js"></script>
+</head>
+<body id="top">
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="mast"><div class="wrap mast-inner">
+    <a class="brand" href="#top" aria-label="XLL Python home"><img src="assets/icon.svg" width="32" height="32" alt="">XLL Python</a>
+    <nav aria-label="Main"><a href="#tour">Product tour</a><a href="#install">Installation</a><a href="https://github.com/sancarn/xll-python" class="git"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 20c-4 1-4-2-6-2m12 4v-3.5c0-1 .1-1.5-.5-2.2 3.3-.4 6.5-1.6 6.5-7.3 0-1.6-.5-2.7-1.4-3.7.2-.5.6-1.9-.1-3.3 0 0-1.2-.4-3.8 1.3a13.7 13.7 0 0 0-7.4 0C5.7 1.6 4.5 2 4.5 2c-.7 1.4-.3 2.8-.1 3.3C3.5 6.3 3 7.4 3 9c0 5.7 3.2 6.9 6.5 7.3-.6.7-.5 1.3-.5 2.2V22"/></svg> GitHub</a></nav>
+  </div></header>
+  <main id="main">
+    <section class="hero" aria-labelledby="title"><div class="wrap hero-inner">
+      <div class="intro">
+        <h1 id="title">Python for<br>desktop Excel</h1>
+        <p>Write a Python function and call it from a cell. XLL Python runs it inside Excel, with a local interpreter, code editor and console.</p>
+        <a class="download" href="https://github.com/sancarn/xll-python/releases/latest/download/PythonExcel.xll"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/></svg>Download the add-in</a>
+        <small>For 64-bit Excel on Windows</small>
+      </div>
+      <div class="demo" aria-label="Forecast worksheet and its Python function">
+        <div class="sheet-window">
+          <div class="sheet-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></svg>Forecast.csv</div>
+          <img src="assets/forecast.png" width="576" height="304" alt="FORECAST.UNITS multiplies 1,250 by 1.12 and returns 1,400 in the selected Excel cell.">
+        </div>
+        <div class="source-window"><div class="source-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-14-2 18"/></svg>forecast.py</div>
+<pre><code><span class="keyword">from</span> xll_python <span class="keyword">import</span> function
+
+<span class="decor">@function</span>(name=<span class="string">"FORECAST.UNITS"</span>)
+<span class="keyword">def</span> <span class="fn">forecast</span>(units, growth):
+    <span class="keyword">return</span> round(units * (<span class="num">1</span> + growth))</code></pre>
+        </div>
+      </div>
+    </div></section>
+
+    <section class="wrap tour" id="tour" aria-labelledby="tour-heading">
+      <h2 id="tour-heading">Product tour</h2>
+      <nav class="tour-nav" aria-label="Product features">
+        <a href="#worksheet" id="tab-worksheet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></svg>Worksheet functions</a>
+        <a href="#editor" id="tab-editor"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-14-2 18"/></svg>Code editor</a>
+        <a href="#console" id="tab-console"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4" width="19" height="16" rx="2"/><path d="m6 9 3 3-3 3m6 0h5"/></svg>Console</a>
+        <a href="#packages" id="tab-packages"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 2 9 5v10l-9 5-9-5V7zM3 7l9 5 9-5m-9 5v10M7 4.7l9 5"/></svg>Packages</a>
+        <a href="#compiler" id="tab-compiler"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h8v7H3zM13 13h8v7h-8zM15 6h4v4M5 14v4h5"/></svg>XLL compiler</a>
+      </nav>
+      <article class="panel" id="worksheet">
+        <div class="description"><h3>Call Python from a cell</h3><p>Save the example file in a folder you trust. In <b>Python → Startup Folders</b>, add that folder under <b>Worksheet functions</b> and choose <b>Refresh</b>.</p><p>Enter <code>=FORECAST.UNITS(B3,C3)</code> in D3. With 1,250 units in B3 and 12% in C3, the cell returns 1,400.</p><a href="assets/forecast.py" download>Download forecast.py</a></div>
+        <a class="capture" href="assets/worksheet.png" aria-label="Open full-size screenshot: Worksheet functions"><img src="assets/worksheet.png" width="992" height="453" loading="lazy" alt="Excel’s Python ribbon and the FORECAST.UNITS formula returning 1,400 in cell D3."></a>
+      </article>
+      <article class="panel" id="editor">
+        <div class="description"><h3>Edit the formula in Python</h3><p>Choose <b>Python → Open IDE</b> and open <code>forecast.py</code>. Saving a file in a worksheet startup folder reloads its functions and recalculates open workbooks.</p><p>To inspect a calculation, set a breakpoint, run <b>Excel: Debug Worksheet Functions</b> from the command palette, then recalculate the cell.</p><a href="https://github.com/sancarn/xll-python#excel-python-ide">Editor guide</a></div>
+        <a class="capture" href="assets/editor.png" aria-label="Open full-size screenshot: Code editor"><img src="assets/editor.png" width="1290" height="690" loading="lazy" alt="The bundled Theia editor showing the Python function behind FORECAST.UNITS."></a>
+      </article>
+      <article class="panel" id="console">
+        <div class="description"><h3>Inspect a range from the console</h3><p>Open <b>Python → Console</b>. Import <code>Application</code> from <code>xll_python</code> to read and write cells in the current workbook.</p><p>Here, <code>Range("D3:D6").Value2</code> returns the four forecast values. Expand the list to inspect each row, or sum them in Python to get 4,894.</p><a href="https://github.com/sancarn/xll-python#python-console">Console guide</a></div>
+        <a class="capture" href="assets/console.png" aria-label="Open full-size screenshot: Console"><img src="assets/console.png" width="1290" height="690" loading="lazy" alt="Python console displaying the four rows returned by Excel and their sum of 4,894."></a>
+      </article>
+      <article class="panel" id="packages">
+        <div class="description"><h3>Install packages for Excel</h3><p>Choose <b>Python → Manage Packages</b>. Search PyPI by name and choose <b>Add</b> to install a package in the add-in’s Python environment.</p><p>The <b>Installed</b> tab lists versions and dependencies. Use <b>Advanced</b> to run a pip command or install a local wheel.</p><a href="https://github.com/sancarn/xll-python#load-the-add-in">Package guide</a></div>
+        <a class="capture" href="assets/packages.png" aria-label="Open full-size screenshot: Packages"><img src="assets/packages.png" width="1290" height="690" loading="lazy" alt="Manage Packages showing Add buttons for openpyxl, pandas, numpy and xlsxwriter."></a>
+      </article>
+      <article class="panel" id="compiler">
+        <div class="description"><h3>Distribute your own add-in</h3><p>Under <b>Python → Compile to XLL</b>, choose <b>New Project</b> and select your source folder. Mark your function file as an entry module and select the packages it needs.</p><p>Choose <b>Compile XLL</b> to bundle the project and interpreter. Colleagues can load the resulting file in 64-bit Windows Excel.</p><a href="https://github.com/sancarn/xll-python#compile-your-own-xll">Compiler guide</a></div>
+        <a class="capture" href="assets/compiler.png" aria-label="Open full-size screenshot: XLL compiler"><img src="assets/compiler.png" width="1290" height="690" loading="lazy" alt="Compile to XLL welcome screen with New Project, Open Project and the project folder drop area."></a>
+      </article>
+    </section>
+
+    <section class="setup" id="install" aria-labelledby="setup-heading"><div class="wrap setup-inner">
+      <div><h2 id="setup-heading">Install XLL Python</h2><p>One XLL includes CPython 3.13 and its standard library. You can load it and run the example offline.</p><a class="download" href="https://github.com/sancarn/xll-python/releases/latest/download/PythonExcel.xll"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/></svg>Download the add-in</a></div>
+      <ol>
+        <li><h3>Save the XLL locally</h3><p>Keep <code>PythonExcel.xll</code> in a permanent folder. The release is unsigned. If Windows blocks the file, review its source before choosing <b>Properties → Unblock</b>.</p></li>
+        <li><h3>Load it in Excel</h3><p>In 64-bit desktop Excel for Windows, open <b>File → Options → Add-ins</b>. Under <b>Manage</b>, choose <b>Excel Add-ins → Go → Browse</b>. Select the XLL and leave it checked.</p></li>
+        <li><h3>Try the forecast example</h3><p>Follow the <a href="#worksheet">worksheet walkthrough</a> to register the function. Excel extracts Python on first use.</p></li>
+      </ol>
+    </div></section>
+  </main>
+  <footer class="wrap footer"><a class="brand" href="#top" aria-label="XLL Python home"><img src="assets/icon.svg" width="32" height="32" alt="">XLL Python</a><nav aria-label="Project links"><a href="https://github.com/sancarn/xll-python#readme">Documentation</a><a href="https://github.com/sancarn/xll-python/releases">Releases</a><a href="https://github.com/sancarn/xll-python/blob/main/LICENSE">Licence</a></nav></footer>
+</body>
+</html>

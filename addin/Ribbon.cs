@@ -12,11 +12,12 @@ namespace PythonExcel
     [ComVisible(true)]
     public class PythonRibbon : ExcelRibbon
     {
-        public override string GetCustomUI(string ribbonId) => @"
+        public override string GetCustomUI(string ribbonId) => Published.Current != null ? (string)Published.Current.Manifest["ribbon"] : @"
 <customUI xmlns='http://schemas.microsoft.com/office/2009/07/customui'>
   <ribbon><tabs><tab id='xllPythonTab' label='Python'>
     <group id='xllPythonRun' label='Python'>
       <button id='xllPythonScript' label='Run Script' size='large' imageMso='MacroPlay' onAction='RunScript'/>
+      <button id='xllPythonCompile' label='Compile to XLL' size='large' imageMso='FileSaveAs' onAction='OpenCompiler'/>
       <button id='xllPythonConsole' label='Console' size='large' imageMso='MacroPlay' onAction='OpenConsole'/>
       <button id='xllPythonIde' label='Open IDE' size='large' imageMso='VisualBasic' onAction='OpenIde'/>
     </group>
@@ -27,6 +28,17 @@ namespace PythonExcel
     </group>
   </tab></tabs></ribbon>
 </customUI>";
+
+        public override object LoadImage(string id) => Published.Current?.Image(id) ?? base.LoadImage(id);
+        public void RunPublished(IRibbonControl control) => Published.Current.Command(control.Id);
+
+        public void OpenCompiler(IRibbonControl control) => Guard(() => {
+            Runtime.Install();
+            var info = new System.Diagnostics.ProcessStartInfo(Path.Combine(Runtime.Home, "pythonw.exe"),
+                "-I " + Published.Quote(Path.Combine(Runtime.Support, "_xll_designer.py")) + " " + Published.Quote(ExcelDnaUtil.XllPath))
+                { UseShellExecute=false, WorkingDirectory=Runtime.Support };
+            System.Diagnostics.Process.Start(info).Dispose();
+        });
 
         static void Guard(Action action)
         {

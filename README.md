@@ -114,6 +114,16 @@ Choose **Python → Open IDE** to open the bundled Eclipse Theia workbench. Expl
 
 The first IDE launch extracts the bundled workbench and Node.js helper. The helper runs locally for the lifetime of the window.
 
+## Compile your own XLL
+
+Open **Python → Compile to XLL** and create a project beside your source files. Give it an add-in name. Add the Python entry modules containing your worksheet functions and ribbon commands, then include any helper modules or data files they import. Paths are relative to the project file. Python package directories keep their normal layout.
+
+On **Ribbon**, add tabs, groups and buttons. Select a group to add a button. Choose a public Python function callable without arguments, set its label and size, and pick an Office icon or import a PNG. The project keeps a copy of imported images. Decorated worksheet functions keep their Excel names and can also be buttons when their signatures allow it. Ribbon commands can use `xll_python.Application` to edit the active workbook.
+
+On **Packages**, select installed distributions and click **Include selected** to record their exact versions. You can also add a package by name or version, or include a local wheel. Compilation uses pip to resolve dependencies into a clean staging directory. Packages need wheels compatible with the bundled Windows x64 interpreter. Local wheel directories are also searched for dependencies. Network access may be needed at build time.
+
+Save the project and select **Compile XLL**. Distribute the generated XLL to 64-bit Windows Excel users. It contains your Python source, selected packages and their resolved dependencies, images and interpreter. It runs offline. Excel registers the embedded worksheet signatures and displays the ribbon at load time. The first formula or button starts a persistent Python worker for that add-in. Generated add-ins share extracted copies of identical runtime files while imports and package versions are private to each worker. Give worksheet functions distinct Excel names across installed add-ins. To update an add-in, rebuild its project and replace the XLL while it is unloaded.
+
 ## Build and verify
 
 Each push to `main` runs a Windows GitHub Actions build. The workflow checks the packaged runtime and restart helper, then publishes the XLL with a versioned tag and SHA-256 digest. Users on v0.1.0 can install the latest release manually once to get the update button.

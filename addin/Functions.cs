@@ -14,6 +14,7 @@ namespace PythonExcel
         {
             try
             {
+                if (Published.Open()) return;
                 var settings = Runtime.LoadSettings();
                 if (settings.folders.Length != 0 || settings.packages.Length != 0)
                     Functions.Load(settings, false);
@@ -25,7 +26,7 @@ namespace PythonExcel
             }
         }
 
-        public void AutoClose() { LiveFunction.DisconnectAll(); ConsoleWindow.Shutdown(); PipWindow.Shutdown(); IdeWindow.Shutdown(); }
+        public void AutoClose() { LiveFunction.DisconnectAll(); Published.Current?.Dispose(); ConsoleWindow.Shutdown(); PipWindow.Shutdown(); IdeWindow.Shutdown(); }
     }
 
     internal static class Functions
@@ -54,7 +55,7 @@ namespace PythonExcel
         internal static void ConsoleChanged() =>
             Synchronize((IList)Runtime.Request(new {op="worksheetFunctions"}), true);
 
-        static void Synchronize(IList functions, bool recalculate)
+        internal static void Synchronize(IList functions, bool recalculate)
         {
             var entries = functions.Cast<IDictionary>()
                 .ToDictionary(f => (string)f["name"], StringComparer.OrdinalIgnoreCase);

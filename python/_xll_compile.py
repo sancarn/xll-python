@@ -4,6 +4,7 @@ import base64
 import ctypes
 from ctypes import wintypes
 from hashlib import sha256
+import inspect
 import json
 import os
 from pathlib import Path
@@ -12,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from types import CodeType
 import urllib.request
 import uuid
 import xml.etree.ElementTree as ET
@@ -27,20 +29,52 @@ def inside(root, name):
     return path
 
 
+def _generator_locations(code):
+    if code.co_flags & (inspect.CO_GENERATOR | inspect.CO_ASYNC_GENERATOR):
+        yield code.co_name, code.co_firstlineno
+    for child in code.co_consts:
+        if isinstance(child, CodeType):
+            yield from _generator_locations(child)
+
+
 def command_names(root, entries):
-    """Offer simple command candidates without importing the project in the designer."""
-    names = []
+    """Read macro declarations without executing entry modules or their dependencies."""
+    commands = []
     for entry in entries:
         module = list(Path(entry).with_suffix("").parts)
         if module[-1] == "__init__":
             module.pop()
-        for fn in ast.parse(inside(root, entry).read_bytes(), entry).body:
-            if not isinstance(fn, (ast.AsyncFunctionDef, ast.FunctionDef)) or fn.name.startswith("_"):
+        decorators = set()
+        tree = ast.parse(inside(root, entry).read_bytes(), entry)
+        # Compilation identifies the owning function of each yield without executing the entry.
+        generators = set(_generator_locations(compile(tree, entry, "exec")))
+        for fn in tree.body:
+            if isinstance(fn, ast.Import):
+                decorators.update((a.asname or a.name) + ".macro" for a in fn.names if a.name == "xll_python")
+            elif isinstance(fn, ast.ImportFrom) and fn.level == 0 and fn.module == "xll_python":
+                decorators.update(a.asname or "macro" for a in fn.names if a.name in ("macro", "*"))
+            if not isinstance(fn, (ast.AsyncFunctionDef, ast.FunctionDef)):
                 continue
             args = fn.args
-            if len(args.posonlyargs) + len(args.args) == len(args.defaults) and None not in args.kw_defaults:
-                names.append(".".join([*module, fn.name]))
-    return sorted(set(names))
+            if len(args.posonlyargs) + len(args.args) != len(args.defaults) or None in args.kw_defaults:
+                continue
+            if fn.decorator_list and (fn.name, fn.decorator_list[0].lineno) in generators:
+                continue
+            for decorator in fn.decorator_list:
+                call = decorator if isinstance(decorator, ast.Call) else None
+                if ast.unparse(call.func if call else decorator) not in decorators:
+                    continue
+                name = next((kw.value for kw in call.keywords if kw.arg == "name"), None) if call else None
+                try:
+                    label = ast.literal_eval(name) if name is not None else fn.name
+                except ValueError:
+                    label = fn.name  # Computed labels are resolved when the module is loaded.
+                if not isinstance(label, str):
+                    break
+                label = label.strip() or fn.name
+                commands.append(dict(target=".".join([*module, fn.name]), label=label))
+                break
+    return sorted(commands, key=lambda cmd: (cmd["label"].casefold(), cmd["target"]))
 
 
 def resource_bytes(template, name, kind):
@@ -154,7 +188,8 @@ def ribbon(project, root, available):
                 bid = f"{gid}b{b}"
                 target = button["command"]
                 if target not in available:
-                    raise ValueError(f"{button['label']}: {target} must be callable without arguments")
+                    requirement = "marked with @macro and " if button.get("macro") else ""
+                    raise ValueError(f"{button['label']}: {target} must be {requirement}callable without arguments")
                 opts = dict(id=bid, label=button["label"], onAction="RunPublished",
                             size="large" if button.get("large") else "normal")
                 if button.get("image"):
@@ -189,7 +224,11 @@ def publish(project_file, template, output):
             dest = stage / "src" / path.relative_to(root)
             dest.parent.mkdir(exist_ok=True, parents=True)
             shutil.copyfile(path, dest)
-        (stage / "project.json").write_text(json.dumps(dict(id=project["id"], entries=project["entries"])), encoding="utf-8")
+        buttons = [b for t in project["tabs"] for g in t["groups"] for b in g["buttons"]]
+        marked = {b["command"] for b in buttons if b.get("macro")}
+        legacy = sorted({b["command"] for b in buttons} - marked)
+        (stage / "project.json").write_text(json.dumps(dict(id=project["id"], entries=project["entries"],
+                                                            legacyCommands=legacy)), encoding="utf-8")
         requirements = []
         wheels = []
         for spec in project["packages"]:

@@ -16,13 +16,14 @@ import traceback
 import types
 
 from xll_python import ExcelError
-from _xll_functions import _call, _encode, _invoke, _register
+from _xll_functions import _call, _command_label, _encode, _invoke, _register, _run_command
 from _xll_application import Session, active
 from _xll_repl import Console
 from _xll_streams import Streams
 
 
 _functions = {}
+_macros = {}
 _startup_entries = []
 _managed_paths = []
 _script_lock = threading.RLock()
@@ -157,7 +158,7 @@ sys.meta_path.insert(sys.meta_path.index(importlib.machinery.PathFinder), _start
 
 
 def _discover(folders, packages, refresh=False):
-    global _functions, _startup_entries, _managed_paths
+    global _functions, _startup_entries, _managed_paths, _macros
     previous_roots = _startup_imports.roots
     roots = tuple(os.path.join(os.path.normcase(os.path.abspath(folder)), "") for folder in folders)
     previous_modules = {}
@@ -172,6 +173,7 @@ def _discover(folders, packages, refresh=False):
     sys.path[:] = [path for path in sys.path if path not in _managed_paths]
     original = sys.path.copy()
     functions, entries, errors = {}, [], []
+    macros, menu = {}, []
     try:
         for folder in packages:
             if not Path(folder).is_dir():
@@ -197,6 +199,17 @@ def _discover(folders, packages, refresh=False):
                     exec(compile(path.read_bytes(), str(path), "exec"), module.__dict__)
                     local = [fn for fn in vars(module).values()
                              if inspect.isfunction(fn) and fn.__module__ == key]
+                    for name, fn in vars(module).items():
+                        if (inspect.isfunction(fn) and fn.__module__ == key and
+                                name == fn.__name__ and hasattr(fn, "__excel_macro__")):
+                            try:
+                                label = _command_label(fn)
+                            except (TypeError, ValueError) as error:
+                                errors.append(f"{path} ({name}): {error}")
+                                continue
+                            target = key + "." + name
+                            macros[target] = fn
+                            menu.append(dict(target=target, label=label, source=str(path)))
                     for fn in dict.fromkeys([*local, *getattr(module, "__excel_exports__", ())]):
                         try:
                             _register(fn, functions, entries)
@@ -206,9 +219,9 @@ def _discover(folders, packages, refresh=False):
                     errors.append(f"{path}\n{traceback.format_exc()}")
         if refresh and errors:
             raise ValueError("Refresh failed. Previous functions remain active.\n" + "\n".join(errors))
-        _functions, _startup_entries = functions, entries
+        _functions, _startup_entries, _macros = functions, entries, macros
         _managed_paths = [path for path in sys.path if path not in original]
-        return dict(functions=_worksheet_entries(), errors=errors)
+        return dict(functions=_worksheet_entries(), macros=menu, errors=errors)
     except BaseException:
         sys.path[:] = old_path
         if refresh:
@@ -274,6 +287,17 @@ def _execute(operation, request):
     _trace_worker()
     if operation == "script":
         return _script(request["path"])
+    if operation == "macro":
+        stream = io.StringIO()
+        previous = getattr(_capture, "stream", None)
+        _capture.stream = stream
+        try:
+            _run_command(_macros[request["target"]])
+            return stream.getvalue()
+        except BaseException as err:
+            raise RuntimeError(stream.getvalue() + traceback.format_exc()) from err
+        finally:
+            _capture.stream = previous
     return _invoke(registration, request["args"])
 
 
@@ -311,14 +335,14 @@ def dispatch(message):
             value = _worksheet_entries()
         elif op == "discover":
             value = _discover(req["folders"], req["packages"], req.get("refresh", False))
-        elif op == "script" and req.get("excelPipe"):
+        elif op in ("script", "macro") and req.get("excelPipe"):
             session = Session(req["excelPipe"])
             try:
                 with active(session):
                     value = _execute(op, req)
             finally:
                 session.close()
-        elif op in ("call", "script", "streamOpen"):
+        elif op in ("call", "script", "macro", "streamOpen"):
             with active(None):
                 value = _execute(op, req)
         elif op == "streamClose":

@@ -41,7 +41,7 @@ def project(folder, version):
                     f"Requires-Dist: xll_fixture_dep=={version}\n")
     (folder / "helper.py").write_text(f"OFFSET={10*version}\n")
     (folder / "reports.py").write_text(f"""import os
-from xll_python import Application, function
+from xll_python import Application, function, macro
 from helper import OFFSET
 from xll_fixture import VALUE
 
@@ -65,6 +65,7 @@ async def async_value():
 def stream_value():
     yield VALUE
 
+{'@macro(name="Refresh report")' if version == 1 else ''}
 def refresh():
     cell = Application.ActiveSheet.Range("B{version}")
     cell.Value2 = "{label} " + str(VALUE)

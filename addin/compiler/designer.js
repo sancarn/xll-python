@@ -5,6 +5,7 @@ const bridge = window.chrome.webview;
 let project, paths, saved, selectedFile, installed, selection, busy = false;
 let reply, sequence = 0;
 const images = new Map();
+let macros = [];
 const directoryState = new Map();
 
 function host(action, data = {}, drop) {
@@ -147,16 +148,16 @@ async function showTab(tab) {
   if (tab === "info") renderTree();
   if (tab === "ribbon") {
     if (!selection.tab) selection = {tab: project.tabs[0]};
+    macros = [];
     renderRibbon();
-    const names = await host("commands", {entries: project.entries});
-    $("commands").replaceChildren(...names.map(name => node("option", name)));
+    macros = await host("commands", {entries: project.entries});
     for (const t of project.tabs) for (const g of t.groups) for (const b of g.buttons) {
       if (b.image && !images.has(b.image)) {
         const result = await host("image", {name: b.image});
         images.set(b.image, result.src);
       }
     }
-    renderPreview();
+    renderRibbon();
   }
   if (tab === "packages") {
     if (!installed) installed = await host("installed");
@@ -264,7 +265,7 @@ function renderPreview() {
       if (src) { icon.src = src; icon.alt = ""; }
       icon.className = "glyph";
       icon.setAttribute("aria-hidden", "true");
-      control.title = b.command || "Choose a Python function";
+      control.title = b.command || "Choose a Python macro";
       control.append(icon, node("span", b.label || "Untitled button"));
       controls.append(control);
     }
@@ -287,6 +288,10 @@ function renderRibbon() {
   if (!current) return;
   $("label").value = current.label;
   if (item) {
+    const options = macros.map(m => new Option(m.label + " (" + m.target + ")", m.target));
+    if (item.command && !macros.some(m => m.target === item.command))
+      options.push(new Option(item.command + " (saved binding)", item.command));
+    $("command").replaceChildren(new Option(macros.length ? "Choose a macro" : "No @macro functions found", ""), ...options);
     $("command").value = item.command;
     $("officeIcon").value = item.imageMso || "";
     $("large").checked = !!item.large;
@@ -312,11 +317,19 @@ $("removeNode").onclick = () => {
   list.splice(list.indexOf(selectedNode()), 1);
   select(group ? tab : project.tabs[0], item ? group : null);
 };
-for (const [id, key] of [["label","label"], ["command","command"], ["officeIcon","imageMso"], ["large","large"]]) {
+$("command").onchange = () => {
+  const item = selection.item;
+  const macro = macros.find(m => m.target === $("command").value);
+  if (macro && (!item.label.trim() || item.label === "New button" || item.label === macros.find(m => m.target === item.command)?.label))
+    item.label = macro.label;
+  item.command = $("command").value;
+  item.macro = true;
+  renderRibbon();
+};
+for (const [id, key] of [["label","label"], ["officeIcon","imageMso"], ["large","large"]]) {
   $(id).oninput = () => {
     const field = $(id);
     selectedNode()[key] = id === "large" ? field.checked : field.value;
-    if (id === "command") selectedNode().command = field.value.trim();
     renderPreview();
   };
 }

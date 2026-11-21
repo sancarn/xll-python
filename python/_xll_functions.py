@@ -10,6 +10,25 @@ import typing
 from xll_python import ExcelError, Function, Reference
 
 
+def _command_label(fn):
+    if inspect.isgeneratorfunction(fn) or inspect.isasyncgenfunction(fn):
+        raise TypeError("a macro cannot be a generator")
+    try:
+        inspect.signature(fn).bind()
+    except TypeError as error:
+        raise TypeError("a macro must be callable without arguments") from error
+    name = getattr(fn, "__excel_macro__", "")
+    if not isinstance(name, str):
+        raise TypeError("a macro name must be a string")
+    return name.strip() or fn.__name__
+
+
+def _run_command(fn):
+    result = fn()
+    if inspect.isawaitable(result):
+        asyncio.run(result)
+
+
 def _annotation(annotation):
     if typing.get_origin(annotation) is typing.Annotated:
         return typing.get_args(annotation)

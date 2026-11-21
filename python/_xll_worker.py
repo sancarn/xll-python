@@ -1,5 +1,4 @@
 """Load one published project into a private interpreter and dispatch Excel requests."""
-import asyncio
 import importlib
 import inspect
 import json
@@ -16,11 +15,12 @@ def load(directory):
     # -I -S excludes the author's installed packages and the recipient's user site.
     support = str(Path(__file__).resolve().parent)
     sys.path.insert(0, support)
-    from _xll_functions import _register
+    from _xll_functions import _command_label, _register
     import site
     site.addsitedir(str(directory / "packages"))
     sys.path.insert(1, str(directory / "src"))
     project = json.loads((directory / "project.json").read_text(encoding="utf-8"))
+    legacy = set(project.get("legacyCommands", ()))
     commands, entries, functions = {}, [], {}
     for relative in project["entries"]:
         parts = list(Path(relative).with_suffix("").parts)
@@ -35,15 +35,17 @@ def load(directory):
         for fn in dict.fromkeys([*local, *getattr(module, "__excel_exports__", ())]):
             _register(fn, functions, entries)
         for name, fn in vars(module).items():
-            if name.startswith("_") or not inspect.isfunction(fn) or fn.__module__ != module.__name__:
+            if not inspect.isfunction(fn) or fn.__module__ != module.__name__:
                 continue
-            if inspect.isgeneratorfunction(fn) or inspect.isasyncgenfunction(fn):
+            target = module.__name__ + "." + name
+            marked = name == fn.__name__ and hasattr(fn, "__excel_macro__")
+            if not marked and (name.startswith("_") or target not in legacy):
                 continue
             try:
-                inspect.signature(fn).bind()
-            except TypeError:
+                _command_label(fn)
+            except (TypeError, ValueError):
                 continue
-            commands[module.__name__ + "." + name] = fn
+            commands[target] = fn
     return functions, commands, entries
 
 
@@ -67,7 +69,7 @@ def serve(root):
                 pass
     os.chdir(work)
     functions, commands, _ = load(root)
-    from _xll_functions import _call, _encode, _invoke
+    from _xll_functions import _call, _encode, _invoke, _run_command
     from _xll_streams import Streams
     subscriptions = Streams()
     from _xll_application import Session, active
@@ -83,9 +85,7 @@ def serve(root):
                 session = Session(request["excelPipe"])
                 try:
                     with active(session):
-                        value = commands[request["name"]]()
-                        if inspect.isawaitable(value):
-                            asyncio.run(value)
+                        _run_command(commands[request["name"]])
                     value = None
                 finally:
                     session.close()

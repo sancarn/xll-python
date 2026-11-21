@@ -1,4 +1,4 @@
-# Third-party software in PythonExcel.xll
+# Third-party software in xll-python.xll
 
 The following source versions correspond to the components bundled in this release.
 

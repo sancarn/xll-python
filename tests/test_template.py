@@ -20,7 +20,7 @@ class TemplateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, XLL_PYTHON_HOME=tmp), \
                 patch.object(compiler, "resource_bytes", return_value=json.dumps(pin)), \
                 patch.object(compiler.urllib.request, "urlopen") as download:
-            workbench = Path(tmp) / "PythonExcel.xll"
+            workbench = Path(tmp) / "xll-python.xll"
             output = Path(tmp) / "Example.xll"
             download.return_value = BytesIO(data)
             self.assertEqual(compiler.optimised_template(workbench, output), data)

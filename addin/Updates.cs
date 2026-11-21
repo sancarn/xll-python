@@ -19,7 +19,7 @@ namespace PythonExcel
     internal static class Updates
     {
         const string Repository = "sancarn/xll-python";
-        const string AssetName = "PythonExcel.xll";
+        const string AssetName = "xll-python.xll";
         const string Caption = "Python for Excel update";
         static int busy;
 
@@ -72,7 +72,8 @@ namespace PythonExcel
                     client.DefaultRequestHeaders.UserAgent.ParseAdd("PythonExcel-Updater/1.0");
                     var json = await client.GetStringAsync("https://api.github.com/repos/" + Repository + "/releases/latest").ConfigureAwait(false);
                     var release = Runtime.Json.Deserialize<Release>(json);
-                    var asset = release.assets.Single(a => a.name == AssetName);
+                    var asset = release.assets.SingleOrDefault(a => a.name == AssetName)
+                        ?? release.assets.Single(a => a.name == "PythonExcel.xll");
                     if (!Regex.IsMatch(asset.digest ?? "", "^sha256:[a-f0-9]{64}$") || asset.size <= 0)
                         throw new InvalidDataException("GitHub did not provide a valid SHA-256 digest and size.");
                     string hash = asset.digest.Substring(7);
@@ -82,7 +83,7 @@ namespace PythonExcel
                         ShowResult(() => Report("You already have the latest available update."));
                         return;
                     }
-                    string url = "https://github.com/" + Repository + "/releases/download/" + release.tag_name + "/" + AssetName;
+                    string url = "https://github.com/" + Repository + "/releases/download/" + release.tag_name + "/" + asset.name;
                     if (asset.browser_download_url != url) throw new InvalidDataException("Unexpected GitHub asset URL.");
                     staged = target + "." + Guid.NewGuid().ToString("N") + ".tmp";
                     using (var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false))

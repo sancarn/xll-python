@@ -1,7 +1,7 @@
 <Project DefaultTargets="Pack" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <UsingTask TaskName="ExcelDna.AddIn.Tasks.PackExcelAddIn" AssemblyFile="../.build/exceldna.addin/tools/net462/ExcelDna.AddIn.Tasks.dll" />
   <PropertyGroup>
-    <AddInName Condition="'$(AddInName)' == ''">PythonExcel</AddInName>
+    <AddInName Condition="'$(AddInName)' == ''">xll-python</AddInName>
   </PropertyGroup>
   <Target Name="Pack">
     <PackExcelAddIn OutputDnaFileName="$(MSBuildProjectDirectory)/../.build/pack/$(AddInName).dna"

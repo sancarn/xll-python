@@ -189,7 +189,7 @@ def main():
     template = pack(vs, out, "PythonExcelRuntime", ROOT / "addin/runtime/PythonExcelRuntime.dna", lean_runtime)
     pin = out / "runtime-template.json"
     pin.write_text(json.dumps(dict(tag=release, sha256=sha256(template.read_bytes()).hexdigest())), encoding="ascii")
-    pack(vs, out, "PythonExcel", ROOT / "addin/PythonExcel.dna", runtime, [("EXCEL_IDE", ide), ("RUNTIME_TEMPLATE", pin)])
+    pack(vs, out, "xll-python", ROOT / "addin/PythonExcel.dna", runtime, [("EXCEL_IDE", ide), ("RUNTIME_TEMPLATE", pin)])
 
 
 if __name__ == "__main__":

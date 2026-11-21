@@ -4,17 +4,17 @@
 
 [Product tour and installation guide](https://sancarn.github.io/xll-python/)
 
-[Download the latest 64-bit XLL](https://github.com/sancarn/xll-python/releases/latest/download/PythonExcel.xll). It contains CPython 3.13.12 for Windows x64, its standard library, the native DLLs, Tcl/Tk, development headers and import libraries, pip’s offline bootstrap wheel, and the Excel add-in. Worksheet functions and scripts run in the Excel process. Each pip command runs in a separate process using the same packaged interpreter.
+[Download the latest 64-bit XLL](https://github.com/sancarn/xll-python/releases/latest/download/xll-python.xll). It contains CPython 3.13.12 for Windows x64, its standard library, the native DLLs, Tcl/Tk, development headers and import libraries, pip’s offline bootstrap wheel, and the Excel add-in. Worksheet functions and scripts run in the Excel process. Each pip command runs in a separate process using the same packaged interpreter.
 
 ## Load the add-in
 
-1. Save `PythonExcel.xll` to a permanent local folder. If Windows marked the downloaded file as coming from the internet, review its source and use **Properties → Unblock** if appropriate. This build is unsigned.
+1. Save `xll-python.xll` to a permanent local folder. If Windows marked the downloaded file as coming from the internet, review its source and use **Properties → Unblock** if appropriate. This build is unsigned.
 2. In **64-bit desktop Excel for Windows**, open **File → Options → Add-ins → Manage Excel Add-ins → Go → Browse**. Select the XLL and leave it checked.
 3. Open the **Python** ribbon tab. The first operation that needs Python extracts the embedded payload under `%LOCALAPPDATA%\XllPython` and bootstraps pip from the bundled wheel. Installation works offline. Later launches reuse the installed files. With no configured folders, Excel opens the ribbon and initializes Python on first use. The add-in uses Windows’ .NET Framework 4.8.
 
 **Run Script** opens a Windows file picker. Select a Python file to run it as `__main__`. Its folder is on the import path while it runs. A window displays the script’s output or traceback.
 
-**Check for Updates** downloads the latest release from this repository and verifies its SHA-256 digest. Before restarting this Excel instance, the updater gives you three choices.
+**Check for Updates** downloads the latest release from this repository and verifies its SHA-256 digest. If you installed `PythonExcel.xll`, you can keep using that copy. The updater replaces it in place, preserving the filename Excel registered. Before restarting this Excel instance, the updater gives you three choices.
 
 - **Save all** saves your changes. Excel asks where to save each new workbook or edited read-only workbook. Canceling Save As stops the update and leaves the workbooks open. Any saves already completed are kept.
 - **Don't save any** closes every workbook in this instance and discards unsaved changes. After the restart, Excel reopens the last saved versions. Workbooks that were never saved are discarded.
@@ -152,7 +152,7 @@ On Windows x64, install Python 3.10 or later and Visual Studio Build Tools with 
 python build.py
 ```
 
-The build verifies the SHA-256 of each pinned upstream input in `build-inputs.json`, stages the official CPython MSI payloads without installing Python system-wide, compiles the native embedding bridge and ribbon, and packs `dist\PythonExcel.xll` and `dist\PythonExcelRuntime.xll`. Build downloads stay in `.build`. The extracted support directory contains third-party notices, and the runtime contains CPython’s license.
+The build verifies the SHA-256 of each pinned upstream input in `build-inputs.json`, stages the official CPython MSI payloads without installing Python system-wide, compiles the native embedding bridge and ribbon, and packs `dist\xll-python.xll` and `dist\PythonExcelRuntime.xll`. Build downloads stay in `.build`. The extracted support directory contains third-party notices, and the runtime contains CPython’s license.
 
 To exercise the finished file in a disposable Excel instance, install `pywin32` in the **test driver’s** Python and run `python tests/excel_smoke.py`. For the ribbon and IDE checks, also install `pywinauto`, `psutil` and `websocket-client`, set `$env:XLL_WEB_TEST = '1'`, and run `python tests/excel_smoke.py --ui`. The UI checks open temporary test windows on the desktop. The driver scopes its workbook, package installs and configuration to a temporary profile via `XLL_PYTHON_HOME`.
 

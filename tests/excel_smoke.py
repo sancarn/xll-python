@@ -102,7 +102,7 @@ def verify_streams(app, sheet, scripts):
 def main():
     if "--ui" in sys.argv:
         from excel_ui import verify
-    xll = (ROOT / "dist/PythonExcel.xll").resolve(strict=True)
+    xll = (ROOT / "dist/xll-python.xll").resolve(strict=True)
     excel = Path(os.environ["ProgramFiles"]) / "Microsoft Office/root/Office16/EXCEL.EXE"
     # Keep the editor fixture outside AppData, which Chromium classifies as a
     # protected system directory. Release it after both Excel and WebView2 exit.

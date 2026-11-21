@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#102f28">
+  <meta name="description" content="A screenshot guide to saving XLL Python and enabling it in 64-bit desktop Excel for Windows.">
+  <title>Install XLL Python | Windows installation guide</title>
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="mast"><div class="wrap mast-inner">
+    <a class="brand" href="index.html"><img src="assets/icon.svg" width="32" height="32" alt="">XLL Python</a>
+    <nav aria-label="Main"><a href="index.html#tour">Product tour</a><a aria-current="page" href="install.html">Installation</a></nav>
+  </div></header>
+  <main id="main" class="install-guide wrap">
+    <h1>Install XLL Python</h1>
+    <p class="guide-intro">You’ll download one file and tell Excel where to find it. Python is included. When you’re done, you’ll see a <strong>Python</strong> tab at the top of your workbook.</p>
+    <p><strong>Before you start</strong> · Open a workbook in the Windows desktop version of Excel. Choose <strong>File → Account → About Excel</strong> and look for <strong>64-bit</strong> on the first line. This release requires 64-bit Excel on Windows.</p>
+    <section>
+      <h2>1. Give the add-in a permanent home</h2>
+      <p>Choose a folder on your PC that you can keep. For example, open <strong>Documents</strong> in File Explorer, select <strong>New → Folder</strong>, and name it <strong>Excel Add-ins</strong>. If your IT team specifies a folder, use that one.</p>
+      <p><a class="download" href="https://github.com/sancarn/xll-python/releases/latest/download/xll-python.xll">Download xll-python.xll</a></p>
+      <p>If your browser asks where to save the file, choose your folder. If it saves automatically, open <strong>Downloads</strong> in File Explorer, select the downloaded file, press <kbd>Ctrl</kbd> + <kbd>X</kbd>, open your permanent folder and press <kbd>Ctrl</kbd> + <kbd>V</kbd>. Leave the file there so Excel can find it each time it opens.</p>
+    </section>
+    <section>
+      <h2>2. Check the file’s Properties</h2>
+      <div class="guide-pair">
+        <div>
+          <p>In your permanent folder, right-click <strong>xll-python.xll</strong> and choose <strong>Properties</strong>. On the <strong>General</strong> tab, look near the bottom for <strong>Unblock</strong>.</p>
+          <p>This release is unsigned. If you trust the file from the <a href="https://github.com/sancarn/xll-python/releases/latest">official project release</a> and your organisation permits it, tick <strong>Unblock</strong> for this file and choose <strong>OK</strong>.</p>
+          <p><strong>No Unblock box?</strong> Close Properties and continue to step 3. If Windows or Excel says your organisation has blocked the file, ask IT whether they can approve this add-in.</p>
+        </div>
+        <figure>
+          <a href="assets/install-properties.png"><img src="assets/install-properties.png" width="434" height="504" alt="Windows file Properties with the Unblock checkbox highlighted at the bottom of the General tab."></a>
+          <figcaption>Microsoft’s example uses a sample filename. Look for the same checkbox on your file. <a href="https://support.microsoft.com/en-us/excel/excel-is-blocking-untrusted-xll-add-ins-by-default">Microsoft Support</a></figcaption>
+        </figure>
+      </div>
+    </section>
+    <section>
+      <h2>3. Open Excel’s add-in manager</h2>
+      <ol>
+        <li>Open a blank workbook in Microsoft Excel. Choose <strong>File</strong> at the top left, then <strong>Options</strong> at the bottom left.</li>
+        <li>In the Excel Options window, choose <strong>Add-ins</strong> on the left.</li>
+        <li>At the bottom, set <strong>Manage</strong> to <strong>Excel Add-ins</strong> and choose <strong>Go…</strong>.</li>
+      </ol>
+      <figure>
+        <a href="assets/install-excel-options.png"><img src="assets/install-excel-options.png" width="1034" height="747" loading="lazy" alt="Excel Options with Add-ins selected on the left. At the bottom, Excel Add-ins and Go are highlighted."></a>
+        <figcaption>The Manage dropdown sits below the list of active and inactive add-ins.</figcaption>
+      </figure>
+    </section>
+    <section>
+      <h2>4. Select your file and check the ribbon</h2>
+      <p>In the <strong>Add-ins</strong> window, choose <strong>Browse…</strong> on the right. Open the folder you chose in step 1, select <strong>xll-python.xll</strong> and choose <strong>OK</strong> or <strong>Open</strong>. Back in the add-ins list, leave the new entry ticked and choose <strong>OK</strong>.</p>
+      <figure>
+        <a href="assets/install-add-ins.png"><img src="assets/install-add-ins.png" width="512" height="464" loading="lazy" alt="Excel’s Add-ins window with a checkbox beside each add-in and the Browse and OK buttons on the right."></a>
+        <figcaption>Microsoft’s example highlights Analysis ToolPak. In your list, look for the add-in you just added.</figcaption>
+      </figure>
+      <p>Look along the top of your workbook for the <strong>Python</strong> tab. Select it. When you see <strong>Console</strong> and <strong>Open IDE</strong>, the add-in is ready. You can now <a href="index.html#worksheet">try the forecast worksheet</a>.</p>
+      <figure>
+        <a href="assets/worksheet.png"><img src="assets/worksheet.png" width="992" height="453" loading="lazy" alt="An Excel workbook with the Python tab selected and the Console and Open IDE commands visible on the ribbon."></a>
+        <figcaption>The Python ribbon in the example workbook. You’ll see the same commands in a blank workbook.</figcaption>
+      </figure>
+    </section>
+    <p class="guide-credit">Microsoft Windows and Microsoft Excel screenshots. Used with permission from Microsoft. <a href="https://learn.microsoft.com/en-us/answers/questions/5322220/hello-i-dont-find-analyze-data-button-in-excel-off">Excel dialog screenshots from Microsoft Community Support</a>.</p>
+  </main>
+  <footer class="wrap footer"><a class="brand" href="index.html"><img src="assets/icon.svg" width="26" height="26" alt="">XLL Python</a><nav aria-label="Project links"><a href="index.html#tour">Product tour</a><a href="https://github.com/sancarn/xll-python/releases">Releases</a></nav></footer>
+</body>
+</html>

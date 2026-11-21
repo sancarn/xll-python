@@ -1,72 +1,139 @@
-"""Drive the real Tk designer with deterministic file-dialog selections in a disposable project."""
+"""Exercise the packaged designer, native dialogs, WebView2 preview and real compiler."""
 import json
-from pathlib import Path
-import sys
-import time
-import tkinter as tk
-from tkinter import ttk
+import subprocess
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
-import _xll_designer as ui
-
-
-def main(project, template, output, wheel=None):
-    window = tk.Tk()
-    app = ui.Designer(window, template)
-    ui.filedialog.askopenfilename = lambda **kw: str(project)
-    app.open()
-    if wheel:
-        app.packages.delete(0, "end")
-        ui.filedialog.askopenfilenames = lambda **kw: [str(wheel)]
-        app.wheel()
-        assert app.packages.get(0) == wheel.as_posix()
-        app.save()
-        window.destroy()
-        return
-    # Use the same action as "Include selected" in the Packages tab.
-    spec = "xll_fixture==1"
-    index = app.installed.get(0, "end").index(spec)
-    app.installed.selection_set(index)
-    app.packages.delete(0, "end")
-    def widgets(parent):
-        for child in parent.winfo_children():
-            yield child
-            yield from widgets(child)
-    def button(parent, label):
-        return next(w for w in widgets(parent) if isinstance(w, ttk.Button) and w["text"] == label)
-    button(window, "Include selected").invoke()
-    app.tabs.clear()
-    app.render()
-    names = iter(["First", "Reports"])
-    ui.simpledialog.askstring = lambda *a, **kw: next(names)
-    button(window, "Add tab").invoke()
-    button(window, "Add group").invoke()
-    button(window, "Add button").invoke()
-    dialog = next(w for w in window.winfo_children() if isinstance(w, tk.Toplevel))
-    label, command, office = [w for w in widgets(dialog) if isinstance(w, ttk.Entry)]
-    label.insert(0, "Refresh First")
-    assert "reports.refresh" in command["values"]
-    command.set("reports.refresh")
-    ui.filedialog.askopenfilename = lambda **kw: str(project.parent / "icon.png")
-    button(dialog, "Import PNG…").invoke()
-    button(dialog, "Save button").invoke()
-    button(window, "Save project").invoke()
-    saved = json.loads(project.read_text(encoding="utf-8"))
-    assert saved["packages"] == [spec] and saved["tabs"][0]["groups"][0]["buttons"][0]["image"].startswith("ribbon-images/")
-    ui.filedialog.askopenfilename = lambda **kw: str(project)
-    app.open()
-    assert app.state() == saved
-    ui.filedialog.asksaveasfilename = lambda **kw: str(output)
-    problems = []
-    ui.messagebox.showerror = lambda *args, **kw: problems.append(args)
-    button(window, "Compile XLL…").invoke()
-    end = time.monotonic() + 90
-    while app.process and time.monotonic() < end:
-        window.update()
-        time.sleep(.02)
-    assert output.is_file() and not problems, problems
-    window.destroy()
+from excel_smoke import wait_for
+from web_editor import page
+import win32con
+import win32gui
+import win32process
 
 
-if __name__ == "__main__":
-    main(*map(Path, sys.argv[1:]))
+def dialog(pid):
+    found = []
+    def visit(hwnd, _):
+        if (win32process.GetWindowThreadProcessId(hwnd)[1] == pid and win32gui.IsWindowVisible(hwnd)
+                and win32gui.GetClassName(hwnd) == "#32770"):
+            found.append(hwnd)
+    win32gui.EnumWindows(visit, None)
+    return found[0] if found else None
+
+
+def choose_file(pid, path):
+    hwnd = wait_for(lambda: dialog(pid), 15)
+    edits = []
+    win32gui.EnumChildWindows(hwnd, lambda h, _: edits.append(h) if win32gui.GetClassName(h) == "Edit" else None, None)
+    filename = next((h for h in edits if win32gui.GetDlgCtrlID(h) == 1148), edits[0])
+    win32gui.SendMessage(filename, win32con.WM_SETTEXT, 0, str(path))
+    win32gui.PostMessage(win32gui.GetDlgItem(hwnd, 1), win32con.BM_CLICK, 0, 0)
+
+
+def drive_designer(python, support, source, template, output, env, wheel=None):
+    profile = output.parent / ("web-" + output.stem)
+    proc = subprocess.Popen([support/"Designer.exe", python, template, profile],
+                            env=dict(env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="--remote-debugging-port=0"))
+    try:
+        with page(profile, "https://xll-designer.example/") as (js, send):
+            def idle():
+                wait_for(lambda: js("typeof busy !== 'undefined' && !busy"))
+                assert not js("document.querySelector('#status').classList.contains('error')"), js("$('status').innerText")
+            def click(id):
+                js(f"$({json.dumps(id)}).click()")
+            def fill(id, value, event="input"):
+                js(f"$({id!r}).value={json.dumps(value)}; $({id!r}).dispatchEvent(new Event({event!r}))")
+            def section(tab):
+                js(f"document.querySelector('[data-tab={tab}]').click()")
+                idle()
+            def picker(id, path):
+                click(id)
+                choose_file(proc.pid, path)
+                idle()
+            idle()
+            assert js("$('newProject').offsetWidth && $('openProject').offsetWidth")
+            if wheel:
+                picker("openProject", source)
+                original = json.loads(source.read_text())
+                assert js("project") == original
+                section("packages")
+                js("$('included').querySelector('button').click()")
+                picker("wheel", wheel)
+                assert js("project.packages") == [wheel.as_posix()]
+            else:
+                # A filesystem directory dropped by Chromium is delivered as a WebView2File.
+                for kind in ("dragEnter", "dragOver", "drop"):
+                    send("Input.dispatchDragEvent", type=kind, x=140, y=160,
+                         data=dict(items=[], files=[str(source.parent)], dragOperationsMask=1))
+                wait_for(lambda: js("!!project"))
+                idle()
+                js("document.querySelector('button[title=\"reports.py\"]').click()")
+                idle()
+                assert "def refresh" in js("$('source').textContent")
+                fill("role", "entry", "change")
+                assets = source.parent / "assets"
+                assets.mkdir()
+                (assets / "example.txt").write_text("example data")
+                click("refresh")
+                idle()
+                js("document.querySelector('button[title=\"assets/example.txt\"]').click()")
+                idle()
+                assert js("$('role').value") == "excluded" and js("$('role').options[0].disabled")
+                fill("role", "helper", "change")
+                hidden = source.parent / ".config"
+                hidden.mkdir()
+                (hidden / "settings.json").write_text("{}")
+                # Windows pickers can return a junction path for the same project folder.
+                import _winapi
+                alias = output.parent / "source alias"
+                _winapi.CreateJunction(str(source.parent), str(alias))
+                try:
+                    picker("addFiles", alias / ".config/settings.json")
+                finally:
+                    alias.rmdir()
+                assert js("selectedFile") == ".config/settings.json"
+                click("home")
+                wait_for(lambda: js("$('leave').open"))
+                click("cancelLeave")
+                idle()
+                section("packages")
+                js("document.querySelector('[aria-label=\"Include xll_fixture==1\"]').click()")
+                section("ribbon")
+                click("addTab")
+                fill("label", "First")
+                click("addGroup")
+                fill("label", "Reports")
+                click("addButton")
+                fill("label", "Refresh First")
+                assert "reports.refresh" in js("Array.from($('commands').options, o=>o.value)")
+                fill("command", "reports.refresh ")
+                picker("importImage", source.parent/"icon.png")
+                wait_for(lambda: js("document.querySelector('.control.big img')?.naturalWidth"))
+                for _ in range(2):
+                    click("addButton")
+                    click("large")
+                assert js("""(() => {
+                    const [a, b] = Array.from(document.querySelectorAll('.control:not(.big)'), el => el.getBoundingClientRect());
+                    return a.bottom <= b.top;
+                })()""")
+                click("removeNode")
+                js("document.querySelector('.control:not(.big)').click()")
+                click("removeNode")
+                manifest = source.parent / "Designer.xllproject.json"
+                picker("save", manifest)
+                saved = json.loads(manifest.read_text(encoding="utf-8"))
+                assert saved["entries"] == ["reports.py"] and set(saved["files"]) == {"helper.py", "assets/example.txt", ".config/settings.json"}
+                assert saved["packages"] == ["xll_fixture==1"]
+                click("home")
+                idle()
+                picker("openProject", manifest)
+                assert js("project") == saved
+            click("compile")
+            choose_file(proc.pid, output)
+            wait_for(lambda: js("!busy"), 90)
+            idle()
+            assert output.is_file()
+            js("window.chrome.webview.postMessage({id:999,action:'close'})")
+        proc.wait(15)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()

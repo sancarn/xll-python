@@ -11,6 +11,7 @@ import time
 import uuid
 import zipfile
 
+from compiler_designer import drive_designer
 from excel_smoke import ROOT, connect, wait_for
 import psutil
 import win32gui
@@ -109,6 +110,9 @@ def main():
             archive.extractall(home)
         python = home / "python.exe"
         subprocess.run([python, "-I", "-m", "ensurepip"], check=True, env=build_env, stdout=subprocess.DEVNULL)
+        support = base / "support"
+        with zipfile.ZipFile(ROOT/".build/pack/support.zip") as archive:
+            archive.extractall(support)
         outputs = []
         for version, label in enumerate(("First", "Second"), 1):
             source = project(base/label, version)
@@ -116,8 +120,7 @@ def main():
             if version == 1:
                 author_env = dict(build_env, PIP_FIND_LINKS=str(source.parent))
                 subprocess.run([python, "-I", "-m", "pip", "install", "xll_fixture==1"], check=True, env=author_env)
-                subprocess.run([python, "-I", ROOT/"tests/compiler_designer.py", source, template, output],
-                               check=True, env=author_env)
+                drive_designer(python, support, source, template, output, author_env)
             else:
                 wheelhouse = base / "external wheelhouse"
                 wheelhouse.mkdir()
@@ -130,10 +133,7 @@ def main():
                     wheel.symlink_to(cached)
                 except OSError:  # Developer Mode is optional on the Windows test machine.
                     shutil.copyfile(cached, wheel)
-                subprocess.run([python, "-I", ROOT/"tests/compiler_designer.py", source, template, output, wheel],
-                               check=True, env=build_env)
-                subprocess.run([python, "-I", ROOT/"python/_xll_compile.py", source, template, output],
-                               check=True, env=build_env)
+                drive_designer(python, support, source, template, output, build_env, wheel)
             shutil.rmtree(source.parent)
             outputs.append(output)
         # Same source and dependencies, distinct saved projects and writable state.

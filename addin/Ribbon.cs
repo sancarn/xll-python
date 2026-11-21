@@ -21,7 +21,7 @@ namespace PythonExcel
       <button id='xllPythonIde' label='Open IDE' size='large' imageMso='VisualBasic' onAction='OpenIde'/>
     </group>
     <group id='xllPythonSetup' label='Environment'>
-      <button id='xllPythonPip' label='Package Installer' size='large' imageMso='AddInManager' onAction='Packages'/>
+      <button id='xllPythonPip' label='Manage Packages' size='large' imageMso='AddInManager' onAction='Packages'/>
       <button id='xllPythonFolders' label='Startup Folders' size='large' imageMso='FileOpen' onAction='Folders'/>
       <button id='xllPythonUpdate' label='Check for Updates' size='large' imageMso='RefreshAll' onAction='CheckUpdates'/>
     </group>
@@ -47,11 +47,7 @@ namespace PythonExcel
                 }
         });
 
-        public void Packages(IRibbonControl control) => Guard(() =>
-        {
-            Runtime.Ensure();
-            new PipWindow().Show(new Owner());
-        });
+        public void Packages(IRibbonControl control) => Guard(PipWindow.Open);
 
         public void OpenIde(IRibbonControl control) => Guard(IdeWindow.Open);
         public void OpenConsole(IRibbonControl control) => Guard(ConsoleWindow.Open);

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; connect-src 'self' https://pypi.org; base-uri 'none'; form-action 'none'">
+  <title>Manage Packages</title>
+  <link rel="stylesheet" href="packages.css">
+  <script src="packages.js" defer></script>
+</head>
+<body>
+  <header>
+    <h1>Manage Packages</h1>
+    <nav role="tablist" aria-label="Manage Packages">
+      <button role="tab" id="browse-tab" aria-controls="browse" aria-selected="true">Browse</button>
+      <button role="tab" id="installed-tab" aria-controls="installed" aria-selected="false" tabindex="-1">Installed</button>
+      <button role="tab" id="advanced-tab" aria-controls="advanced" aria-selected="false" tabindex="-1">Advanced</button>
+    </nav>
+  </header>
+  <div id="error" role="alert" hidden></div>
+  <main id="browse" role="tabpanel" aria-labelledby="browse-tab">
+    <input id="search" type="search" aria-label="Search packages by name" placeholder="Search packages by name" autofocus>
+    <h2 id="results-title">Suggested for Excel</h2>
+    <p id="search-status" role="status" hidden></p>
+    <div id="results"></div>
+  </main>
+  <main id="installed" role="tabpanel" aria-labelledby="installed-tab" hidden>
+    <div class="section-heading"><h2>Installed in this Python environment</h2><button id="refresh">Refresh</button></div>
+    <p id="inventory-status" role="status"></p>
+    <div id="distributions"></div>
+  </main>
+  <main id="advanced" role="tabpanel" aria-labelledby="advanced-tab" hidden>
+    <div class="section-heading"><h2>Command log</h2></div>
+    <p id="python"></p>
+    <div id="transcript" tabindex="0" aria-label="Pip command log"><p id="empty">Package installs and pip commands appear here.</p></div>
+    <form id="prompt"><label for="command">pip</label><input id="command" autocomplete="off" spellcheck="false" placeholder="Enter a pip command"><button class="primary">Run</button></form>
+  </main>
+</body>
+</html>

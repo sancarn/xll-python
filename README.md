@@ -20,7 +20,13 @@
 
 After Excel exits, a separate helper replaces the XLL at its existing path and reopens the saved workbooks. The add-in folder must be writable. If another Excel instance locks the XLL, the helper reopens the workbooks with the existing version.
 
-**Package Installer** accepts commands such as `list`, `install openpyxl`, `install "C:\downloads\some_package.whl"` and `uninstall -y openpyxl`. You can include the leading `pip`. The command goes directly to the embedded interpreter’s `-m pip`. The terminal shows the interpreter path, streamed output and exit code. Installed packages persist for that runtime. Restart Excel after replacing an imported package or installing a package that uses a startup `.pth` file.
+**Manage Packages** opens a WebView2 window for the add-in’s Python environment.
+
+- **Browse** suggests packages for Excel and searches PyPI by project name. The first search downloads the name index. Later searches reuse the local cache. Choose **Add** to queue an install. Its row shows progress and a tick once the package is installed. If an install fails, choose **View log** for details or **Retry**.
+- **Installed** lists packages and versions, including dependencies. The list refreshes after each command and works offline.
+- **Advanced** accepts pip commands such as `list`, `install "C:\downloads\some_package.whl"`, and `uninstall -y openpyxl`, with or without the leading `pip`. Each command has its own live log and exit code. You can submit more commands while one runs. Browse and Advanced share a queue that runs in order and stays available when you reopen the window in the same Excel session.
+
+Installed packages persist for that runtime. Restart Excel after replacing an imported package or installing a package that uses a startup `.pth` file.
 
 ## Worksheet functions
 

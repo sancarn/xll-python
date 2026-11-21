@@ -43,6 +43,8 @@
       <h2 id="tour-heading">Product tour</h2>
       <nav class="tour-nav" aria-label="Product features">
         <a href="#worksheet" id="tab-worksheet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></svg>Worksheet functions</a>
+        <a href="#live-data" id="tab-live-data"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12h5l3-8 4 16 3-8h5"/></svg>Live data feeds</a>
+        <a href="#macros" id="tab-macros"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m10 8 6 4-6 4z"/></svg>Macros</a>
         <a href="#editor" id="tab-editor"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-14-2 18"/></svg>Code editor</a>
         <a href="#console" id="tab-console"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4" width="19" height="16" rx="2"/><path d="m6 9 3 3-3 3m6 0h5"/></svg>Console</a>
         <a href="#packages" id="tab-packages"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 2 9 5v10l-9 5-9-5V7zM3 7l9 5 9-5m-9 5v10M7 4.7l9 5"/></svg>Packages</a>
@@ -52,6 +54,36 @@
       <article class="panel" id="worksheet">
         <div class="description"><h3>Call Python from a cell</h3><p>Save the example file in a folder you trust. In <b>Python → Startup Folders</b>, add that folder under <b>Worksheet functions</b> and choose <b>Refresh</b>.</p><p>Open the <a href="assets/Forecast.xlsx" download>starter workbook</a>. In D3, enter <code>=FORECAST.UNITS(B3,C3)</code> to get 1,400. Fill the formula down to D6 for the other regions.</p><a href="assets/forecast.py" download>Download forecast.py</a></div>
         <a class="capture" href="assets/worksheet.png" aria-label="Open full-size screenshot: Worksheet functions"><img src="assets/worksheet.png" width="992" height="453" loading="lazy" alt="Excel’s Python ribbon and the FORECAST.UNITS formula returning 1,400 in cell D3."></a>
+      </article>
+      <article class="panel" id="live-data">
+        <div class="description">
+          <h3>Stream values into a cell</h3>
+          <p>The generator runs in the background. Each <code>yield</code> sends a value to Excel, and the cell automatically shows the latest one.</p>
+          <p>Load the <a href="https://github.com/sancarn/xll-python/blob/main/examples/functions.py">example functions</a> in a <a href="#worksheet">worksheet startup folder</a>, then enter <code>=XLLPY.live_random()</code>. The generator picks a random number every two seconds. Fill the formula down and each cell gets its own sequence.</p>
+        </div>
+        <pre class="tour-code"><code><span class="keyword">from</span> random <span class="keyword">import</span> random
+<span class="keyword">from</span> time <span class="keyword">import</span> sleep
+<span class="keyword">from</span> xll_python <span class="keyword">import</span> function
+
+<span class="decor">@function</span>(name=<span class="string">"XLLPY.live_random"</span>,
+          generator_instances=<span class="string">"many"</span>)
+<span class="keyword">def</span> <span class="fn">live_random_number</span>():
+    <span class="keyword">while True</span>:
+        <span class="keyword">yield</span> random()
+        sleep(<span class="num">2</span>)</code></pre>
+      </article>
+      <article class="panel" id="macros">
+        <div class="description">
+          <h3>Run a Python macro from the ribbon</h3>
+          <p>Use <code>@macro</code> to list a Python function under the name you choose. Save this example in a <a href="#worksheet">worksheet startup folder</a> and choose <b>Refresh</b> in <b>Python → Startup Folders</b>.</p>
+          <p>Select a range, open <b>Python → Run Macro</b>, choose <b>Show selection</b> and click <b>Run</b>. The macro prints the address of the selected cells.</p>
+          <a href="https://github.com/sancarn/xll-python#automate-excel-from-python">Macro guide</a>
+        </div>
+        <pre class="tour-code"><code><span class="keyword">from</span> xll_python <span class="keyword">import</span> Application, macro
+
+<span class="decor">@macro</span>(name=<span class="string">"Show selection"</span>)
+<span class="keyword">def</span> <span class="fn">show_selection</span>():
+    print(Application.Selection.Address)</code></pre>
       </article>
       <article class="panel" id="editor">
         <div class="description"><h3>Edit the formula in Python</h3><p>Choose <b>Python → Open IDE</b> and open <code>forecast.py</code>. Saving a file in a worksheet startup folder reloads its functions and recalculates open workbooks.</p><p>To inspect a calculation, set a breakpoint, run <b>Excel: Debug Worksheet Functions</b> from the command palette, then recalculate the cell.</p><a href="https://github.com/sancarn/xll-python#excel-python-ide">Editor guide</a></div>

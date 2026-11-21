@@ -105,9 +105,10 @@ def drive_designer(python, support, source, template, output, env, wheel=None):
                 click("addGroup")
                 fill("label", "Reports")
                 click("addButton")
+                assert js("Array.from($('command').options, o=>o.value)") == ["", "reports.refresh"]
+                fill("command", "reports.refresh", "change")
+                assert js("$('label').value") == "Refresh report"
                 fill("label", "Refresh First")
-                assert "reports.refresh" in js("Array.from($('commands').options, o=>o.value)")
-                fill("command", "reports.refresh ")
                 picker("importImage", source.parent/"icon.png")
                 wait_for(lambda: js("document.querySelector('.control.big img')?.naturalWidth"))
                 for _ in range(2):

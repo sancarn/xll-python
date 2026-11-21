@@ -72,6 +72,18 @@ def verify(app, pid, base, home):
         return max((e.get_value() for e in edits),key=len,default="")
     for label in ("Run Script","Manage Packages","Startup Folders","Open IDE","Check for Updates","Console","Compile to XLL"):
         button(label)
+    app.ActiveSheet.Range("V1").Select()
+    click_ribbon("Run Macro")
+    picker = window("Run Macro")
+    rows = picker.descendants(control_type="ListItem")
+    assert [row.window_text() for row in rows] == ["Write selection"]
+    rows[0].select()
+    picker.child_window(title="Run", control_type="Button").invoke()
+    output = window("Python output")
+    wait_for(lambda: "MACRO_OK" in read_console(output))
+    assert app.ActiveSheet.Range("V1").Value2 == 42
+    close(output)
+    print("PASS: Run Macro listed the startup command and wrote to the active cell", flush=True)
     click_ribbon("Compile to XLL")
     compiler = wait_for(lambda: hwnd_for("Compile to XLL", children=True), 30)
     win32gui.PostMessage(compiler, win32con.WM_CLOSE, 0, 0)

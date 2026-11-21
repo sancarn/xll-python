@@ -126,7 +126,10 @@ def main():
             "import os, sys, ssl, sqlite3, tkinter, pip, linked_module\nfrom xll_python import function\n"
             "__excel_exports__ = [linked_module.address]\n"
             "@function(name='PY.PROBE')\ndef probe(): return [os.getpid(), linked_module.VALUE, sys.prefix, pip.__version__]\n"
-            "@function(name='PY.BAD')\ndef bad(): raise RuntimeError('traceback sentinel')\n")
+            "@function(name='PY.BAD')\ndef bad(): raise RuntimeError('traceback sentinel')\n"
+            "from xll_python import Application, macro\n"
+            "@macro(name='Write selection')\nasync def write_selection():\n"
+            "    Application.ActiveCell.Value2 = 42\n    print('MACRO_OK')\n")
         (profile/"settings.json").write_text(json.dumps(dict(folders=[str(ROOT/"examples"),str(scripts)],packages=[str(packages)])))
         startup = subprocess.STARTUPINFO()
         startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW

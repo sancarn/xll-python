@@ -63,6 +63,18 @@ By default, `generator_instances="one"` shares one generator across cells with t
 
 ## Automate Excel from Python
 
+Use `@macro` on a top-level function in a worksheet startup folder to make it available under **Python → Run Macro**. Choose **Refresh** in **Startup Folders** after editing the file. Opening the picker uses the loaded definitions. Select a macro and click **Run** to execute it against the active Excel instance and see its output.
+
+```python
+from xll_python import Application, macro
+
+@macro(name="Show selection")
+def show_selection():
+    print(Application.Selection.Address)
+```
+
+Bare `@macro` uses the Python function name as the label. Regular and async functions can be macros if they accept a call without arguments. Use `@function` as well to expose a compatible function as a worksheet formula.
+
 Scripts and console commands can import `Application` from `xll_python`. It addresses the Excel instance running the add-in. Use VBA member names for properties, `Range("A1")` for an address, parentheses for collection items, and `Call("Method", ...)` to invoke a method.
 
 ```python
@@ -120,7 +132,7 @@ Open **Python → Compile to XLL**. Choose **New Project** and select your sourc
 
 On **Project Information**, enter the add-in name and select a file in the tree to preview it. Mark Python files that export worksheet functions or ribbon commands as **Entry module**. In a new project, other Python files start as helpers. Select any data files you need and choose **Helper or data file** to bundle them. **Refresh files** picks up new files for you to select. Use **Add files** to include specific files, including ones in hidden folders. Save the project in its source folder so its relative paths and Python package layout travel together.
 
-On **Ribbon**, add a tab, a group, and a button. Select each in the preview to edit its properties. Choose a public Python function callable without arguments, set the button's label and size, and enter an Office icon name or import a PNG. The preview shows button layout and custom images. Excel supplies the actual Office icons. Decorated worksheet functions keep their Excel names and can also be buttons when their signatures allow it. Ribbon commands can use `xll_python.Application` to edit the active workbook.
+On **Ribbon**, add a tab, a group, and a button. Choose an `@macro` from an entry module. Use a direct import from `xll_python` and a literal display name for the designer to read the label without executing the module. The button takes the macro label by default and stores the qualified Python function name as its target. You can customize the label, size, and Office icon or import a PNG. Existing projects keep their saved bindings to undecorated functions. Ribbon commands can use `xll_python.Application` to edit the active workbook.
 
 On **Packages**, choose **Include** beside an installed distribution to record its exact version. You can also add a package by name or version, or include a local wheel. Compilation uses pip to resolve dependencies into a clean staging directory. Packages need wheels compatible with the bundled Windows x64 interpreter. Local wheel directories are also searched for dependencies. Keep external wheels at their selected paths when rebuilding, or put the wheelhouse inside the project for a portable project file. Network access may be needed at build time.
 

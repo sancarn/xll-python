@@ -54,6 +54,22 @@ def function(fn=None, **options):
     return decorate if fn is None else decorate(fn)
 
 
+@overload
+def macro(fn: _F, *, name: str = "") -> _F: ...
+
+
+@overload
+def macro(fn: None = None, *, name: str = "") -> Callable[[_F], _F]: ...
+
+
+def macro(fn=None, *, name=""):
+    """Expose a command callable without arguments in Excel's macro pickers."""
+    def decorate(target):
+        target.__excel_macro__ = name
+        return target
+    return decorate if fn is None else decorate(fn)
+
+
 @dataclass(frozen=True)
 class ExcelError:
     """An Excel error value, using its Excel C API error code."""

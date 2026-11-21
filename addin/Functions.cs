@@ -52,6 +52,8 @@ namespace PythonExcel
         static int generation;
 
 #if !RUNTIME_ONLY
+        internal static IList Macros { get; private set; } = new object[0];
+
         internal static void Load(Settings settings, bool refresh)
         {
             var discovered = (IDictionary)Runtime.Request(new {op="discover", settings.folders, settings.packages, refresh});
@@ -61,6 +63,7 @@ namespace PythonExcel
             {
                 ExcelDna.Logging.LogDisplay.WriteLine("Python startup errors. See " + Runtime.Root + @"\python-excel.log");
             }
+            Macros = (IList)discovered["macros"];
             Synchronize((IList)discovered["functions"], refresh);
         }
 

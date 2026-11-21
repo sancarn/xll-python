@@ -81,6 +81,11 @@ def verify_console(base, pid, sheet):
         run_code("from xll_python import Application\ncell_ref = Application.ActiveSheet.Range(\"T3\")")
         run_code("cell_ref.Value2 = 73")
         assert sheet.Range("T3").Value2 == 73
+        run_code("import contextvars\nsaved = contextvars.copy_context()\ndef guarded(): return saved.run(lambda: Application.ActiveCell.Value2)")
+        sheet.Range("T4").Formula2 = "=XLLPY.console.guarded()"
+        assert sheet.Range("T4").Text == "#VALUE!"
+        run_code("nested = 1\nfor _ in range(150): nested = [nested]\ntry:\n    cell_ref.Value2 = nested\nexcept RuntimeError:\n    cell_ref.Value2 = 74")
+        assert sheet.Range("T3").Value2 == 74
         cell = sheet.Range("N1")
         run_code("factor = 2\ndef scale(x, extra=1): return factor*x + extra")
         assert "=XLLPY.console.scale(x, extra)" in rendered(".entry:last-child .output")

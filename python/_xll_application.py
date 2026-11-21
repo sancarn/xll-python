@@ -1,12 +1,12 @@
 """VBA-style access to the Excel instance serving this command."""
 from contextlib import contextmanager
-from contextvars import ContextVar
+import threading
 import io
 import json
 import weakref
 
 
-_current = ContextVar("excel_object_session", default=None)
+_current = threading.local()
 
 
 class Session:
@@ -47,11 +47,12 @@ class Session:
 
 @contextmanager
 def active(session):
-    token = _current.set(session)
+    previous = getattr(_current, "session", None)
+    _current.session = session
     try:
         yield
     finally:
-        _current.reset(token)
+        _current.session = previous
 
 
 class _Object:
@@ -62,7 +63,7 @@ class _Object:
             weakref.finalize(self, session.released.append, handle)
 
     def _request(self, action, name, args):
-        session = _current.get()
+        session = getattr(_current, "session", None)
         if session is None or (self._handle and self._session is not session):
             raise RuntimeError("Application requires an active Excel script, console or ribbon command")
         return session.request(self._handle, action, name, args)

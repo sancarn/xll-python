@@ -51,7 +51,12 @@ namespace PythonExcel
                     string line;
                     while ((line = await input.ReadLineAsync().ConfigureAwait(false)) != null)
                     {
-                        var request = Runtime.Json.Deserialize<Dictionary<string,object>>(line);
+                        Dictionary<string,object> request;
+                        try { request = Runtime.Json.Deserialize<Dictionary<string,object>>(line); }
+                        catch (Exception e) {
+                            await output.WriteLineAsync(Runtime.Json.Serialize(new { error=e.Message })).ConfigureAwait(false);
+                            continue;
+                        }
                         string reply = null;
                         // Perform COM work only in Excel's macro context. Serialize there too.
                         await ExcelAsyncUtil.QueueAsMacroTask(() => {
@@ -65,7 +70,7 @@ namespace PythonExcel
                 }
             }
             catch (Exception e) { if (!closed) Runtime.Log("Excel object session: " + e.Message); }
-            finally { objects.Clear(); }
+            finally { pipe.Dispose(); objects.Clear(); }
         }
 
         object Argument(object value)

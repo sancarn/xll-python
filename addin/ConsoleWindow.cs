@@ -35,7 +35,6 @@ namespace PythonExcel
             Shown += async (s, e) => await Initialize();
             FormClosed += (s, e) => {
                 closed = true;
-                excel.Dispose();
                 if (sessionOpen)
                 {
                     try
@@ -46,6 +45,7 @@ namespace PythonExcel
                     catch (Exception error) { Runtime.Log(error.ToString()); }
                     finally { QueueRequest(null); }
                 }
+                else excel.Dispose();
             };
         }
 
@@ -83,8 +83,11 @@ namespace PythonExcel
             Controls.Add(new Label { Dock = DockStyle.Fill, Padding = new Padding(12), Text = message });
         }
 
-        object Call(string action, object args = null) =>
-            Runtime.Request(new { op = "repl", session, action, args, excelPipe=excel.Name });
+        object Call(string action, object args = null)
+        {
+            try { return Runtime.Request(new { op = "repl", session, action, args, excelPipe=excel.Name }); }
+            finally { if (action == "close") excel.Dispose(); }
+        }
 
         void Send(object reply)
         {

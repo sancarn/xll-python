@@ -493,7 +493,8 @@ def dispatch(message):
             finally:
                 session.close()
         elif op in ("call", "script", "streamOpen"):
-            value = _execute(op, req)
+            with active(None):
+                value = _execute(op, req)
         elif op == "streamClose":
             _streams.close(req["id"])
             value = None

@@ -2,7 +2,7 @@
 
 # Python for desktop Excel
 
-[Product tour](https://sancarn.github.io/xll-python/) · [Step-by-step installation guide with screenshots](https://sancarn.github.io/xll-python/install.html)
+[Features](https://sancarn.github.io/xll-python/#tour) · [Step-by-step installation guide with screenshots](https://sancarn.github.io/xll-python/install.html)
 
 [Download the latest 64-bit XLL](https://github.com/sancarn/xll-python/releases/latest/download/xll-python.xll). It contains CPython 3.13.12 for Windows x64, its standard library, the native DLLs, Tcl/Tk, development headers and import libraries, pip’s offline bootstrap wheel, and the Excel add-in. Worksheet functions and scripts run in the Excel process. Each pip command runs in a separate process using the same packaged interpreter.
 

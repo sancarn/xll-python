@@ -96,6 +96,20 @@ h3 { font-size: clamp(1.55rem, 2.35vw, 2.45rem); line-height: 1.15; letter-spaci
 .footer { padding-block: 1.8rem; }
 .footer .brand { font-size: 1.08rem; }
 .footer .brand img { width: 26px; height: 26px; }
+
+/* Ko-fi loads its own positioning rules after this stylesheet. */
+body .floatingchat-container-wrap,
+body .floatingchat-container-wrap-mobi,
+body .floating-chat-kofi-popup-iframe,
+body .floating-chat-kofi-popup-iframe-mobi {
+  left: auto;
+  right: 16px;
+}
+body .floatingchat-container-wrap,
+body .floatingchat-container-wrap-mobi { width: 180px; }
+body .floating-chat-kofi-popup-iframe,
+body .floating-chat-kofi-popup-iframe-mobi { max-width: calc(100% - 32px); }
+
 @media (max-width: 790px) {
   .hero-inner { grid-template-columns: 1fr 1fr; gap: .8rem; }
   h1 { font-size: clamp(3rem, 7vw, 3.7rem); }

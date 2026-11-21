@@ -28,7 +28,7 @@ namespace PythonExcel
         Uri origin;
         bool closed, ready, closing, allowClose;
         readonly Stopwatch closeWait = new Stopwatch();
-        string version;
+        string version, workspaceFile;
         int refreshVersion;
 
         internal static void Open() => host.Open();
@@ -124,9 +124,9 @@ namespace PythonExcel
             if (closed) return;
             version = (string)env["version"];
             string defaults = WriteWorkspaceDefaults(env);
-            string worksheet = Path.Combine(Runtime.Root, "IDE", "workspaces", "Excel Python.theia-workspace");
+            workspaceFile = Path.Combine(Runtime.Root, "IDE", "workspaces", "Excel Python.theia-workspace");
             var info = new ProcessStartInfo(Path.Combine(dir, "node.exe"),
-                "lib/backend/main.js --hostname 127.0.0.1 --port 0 \"" + worksheet + "\"") {
+                "lib/backend/main.js --hostname 127.0.0.1 --port 0 \"" + workspaceFile + "\"") {
                 WorkingDirectory = dir, UseShellExecute = false, CreateNoWindow = true,
                 RedirectStandardOutput = true, RedirectStandardError = true
             };
@@ -179,24 +179,21 @@ namespace PythonExcel
         bool IsLocal(string uri) => Uri.TryCreate(uri, UriKind.Absolute, out var target)
             && target.GetLeftPart(UriPartial.Authority) == origin.GetLeftPart(UriPartial.Authority);
 
-        void WorkspaceFolderChanged(string path, bool added)
+        Task WorkspaceFolderChanged(string path, bool added, string workspace)
         {
             path = Path.GetFullPath(path);
             var settings = Runtime.LoadSettings();
             bool worksheet = settings.folders.Any(folder => Runtime.SameFolder(folder, path));
             bool package = settings.packages.Any(folder => Runtime.SameFolder(folder, path));
-            void Confirm(string question, string kind)
-            {
-                if (MessageBox.Show(this, question + "\n\n" + path, "Excel startup folders",
-                        MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) == DialogResult.Yes)
-                    Runtime.ChangeStartupFolder(path, kind, added);
-            }
-            if (added && !worksheet && !package)
-                Confirm("Also load worksheet functions from this folder when Excel starts?", "folders");
-            if (!added && worksheet)
-                Confirm("Also remove this worksheet folder from Excel startup?", "folders");
-            if (!added && package)
-                Confirm("Also remove this folder from Excel's package links?", "packages");
+            bool Confirm(string question) =>
+                MessageBox.Show(this, question + "\n\n" + path, "Excel startup folders", MessageBoxButtons.YesNo,
+                                MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) == DialogResult.Yes;
+            bool changeWorksheet = added
+                ? !worksheet && !package && Confirm("Also load worksheet functions from this folder when Excel starts?")
+                : worksheet && Confirm("Also remove this worksheet folder from Excel startup?");
+            bool changePackage = !added && package && Confirm("Also remove this folder from Excel's package links?");
+            bool remember = workspace != null && StringComparer.OrdinalIgnoreCase.Equals(Path.GetFullPath(workspace), workspaceFile);
+            return Task.Run(() => Runtime.ApplyWorkspaceFolder(path, added, changeWorksheet, changePackage, remember));
         }
 
         static bool LoadsFile(Settings settings, string file) =>
@@ -212,9 +209,7 @@ namespace PythonExcel
             await Task.Delay(300).ConfigureAwait(false);
             if (version != Volatile.Read(ref refreshVersion)) return;
             await ExcelAsyncUtil.QueueAsMacroTask(() => {
-                var settings = Runtime.LoadSettings();
-                if (version == Volatile.Read(ref refreshVersion) && LoadsFile(settings, file))
-                    Functions.Load(settings, true);
+                if (version == Volatile.Read(ref refreshVersion)) Functions.Load(Runtime.LoadSettings(), true);
             }).ConfigureAwait(false);
         }
 
@@ -248,7 +243,7 @@ namespace PythonExcel
                         await Task.Run(() => Runtime.Request(new { op = "ideConnect", port, token = access, session = token }));
                         break;
                     case "workspaceFolder":
-                        WorkspaceFolderChanged((string)args["path"], (bool)args["added"]);
+                        await WorkspaceFolderChanged((string)args["path"], (bool)args["added"], (string)args["workspace"]);
                         break;
                     case "refreshSaved":
                         await RefreshSaved((string)args["path"]);

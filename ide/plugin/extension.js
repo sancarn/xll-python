@@ -34,10 +34,11 @@ exports.activate = async context => {
     }));
     let folderChanges = Promise.resolve();
     context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(({ added, removed }) => {
+        const workspace = vscode.workspace.workspaceFile?.fsPath || null;
         for (const [folders, isAddition] of [[removed, false], [added, true]]) {
             for (const { uri } of folders) {
                 if (uri.scheme !== 'file') continue;
-                folderChanges = folderChanges.then(() => host('workspaceFolder', { path: uri.fsPath, added: isAddition }))
+                folderChanges = folderChanges.then(() => host('workspaceFolder', { path: uri.fsPath, added: isAddition, workspace }))
                     .catch(reportError);
             }
         }

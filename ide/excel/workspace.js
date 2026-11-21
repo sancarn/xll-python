@@ -68,18 +68,29 @@ export function prepareWorkspace(defaultsFile) {
     const paths = seed => new Set(seed.folders.map(folder => path.resolve(folder).toLowerCase()));
     const before = paths(previous);
     const after = paths(next);
+    const choicesFile = path.join(directory, 'explorer-choices.json');
+    const explicit = new Set(fs.existsSync(choicesFile)
+        ? JSON.parse(read(choicesFile).replace(/^\uFEFF/, '')).map(folder => path.resolve(folder).toLowerCase()) : []);
+    if (!exists && source !== defaultsFile) {
+        // Old workspaces predate the explicit choices file. Keep their extra and hidden roots.
+        const visible = new Set(data.folders.map(folder => folderPath(folder, path.dirname(source)).toLowerCase()));
+        for (const id of new Set([...after, ...visible])) {
+            if (after.has(id) !== visible.has(id)) explicit.add(id);
+        }
+        if (explicit.size) writeAtomic(choicesFile, JSON.stringify([...explicit]));
+    }
     const kept = new Set();
     const folders = [];
     for (const folder of data.folders) {
         const absolute = folderPath(folder, path.dirname(source));
         const id = absolute.toLowerCase();
-        if (before.has(id) && !after.has(id)) continue;
+        if (!explicit.has(id) && before.has(id) && !after.has(id)) continue;
         kept.add(id);
         folders.push(exists ? folder : { ...folder, path: absolute });
     }
     for (const folder of defaults.folders) {
         const id = folderPath(folder, directory).toLowerCase();
-        if (!before.has(id) && !kept.has(id)) folders.push(folder);
+        if (!explicit.has(id) && !before.has(id) && !kept.has(id)) folders.push(folder);
     }
     if (JSON.stringify(folders) !== JSON.stringify(data.folders)) update(['folders'], folders);
     for (const [setting, value] of Object.entries(defaults.settings)) {

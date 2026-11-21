@@ -87,17 +87,12 @@ namespace PythonExcel
         internal static bool SameFolder(string first, string second) =>
             StringComparer.OrdinalIgnoreCase.Equals(FolderKey(first), FolderKey(second));
 
-        static void EditSettings(Action<Settings> change)
+        static void WithFolderLock(Action change)
         {
             using (var mutex = new Mutex(false, @"Local\XllPython.StartupFolders"))
             {
                 try { mutex.WaitOne(); } catch (AbandonedMutexException) { }
-                try
-                {
-                    var latest = LoadSettings();
-                    change(latest);
-                    WriteJson(SettingsPath, latest);
-                }
+                try { change(); }
                 finally { mutex.ReleaseMutex(); }
             }
         }
@@ -111,41 +106,39 @@ namespace PythonExcel
                 return latest.Where(p => !Contains(before, p) || Contains(after, p))
                     .Concat(after.Where(p => !Contains(before, p) && !Contains(latest, p))).ToArray();
             }
-            void ApplySelection(Settings settings)
-            {
-                settings.folders = Apply(settings.folders, original.folders, selection.folders);
-                settings.packages = Apply(settings.packages, original.packages, selection.packages);
-            }
-            if (refresh)
-            {
-                var active = LoadSettings();
-                ApplySelection(active);
-                Functions.Load(active, true);
-            }
-            EditSettings(ApplySelection);
+            WithFolderLock(() => {
+                var latest = LoadSettings();
+                latest.folders = Apply(latest.folders, original.folders, selection.folders);
+                latest.packages = Apply(latest.packages, original.packages, selection.packages);
+                if (refresh) Functions.Load(latest, true);
+                WriteJson(SettingsPath, latest);
+            });
         }
 
-        internal static void ChangeStartupFolder(string path, string kind, bool add)
+        internal static void ApplyWorkspaceFolder(string path, bool added, bool worksheet, bool package, bool remember)
         {
-            if (add && !Directory.Exists(path)) throw new DirectoryNotFoundException(path);
-            EditSettings(settings => {
-                var paths = kind == "folders" ? settings.folders : settings.packages;
-                var updated = paths.ToList();
-                if (!add) updated.RemoveAll(p => SameFolder(p, path));
-                else if (!paths.Any(p => SameFolder(p, path))) updated.Add(path);
-                if (kind == "folders") settings.folders = updated.ToArray();
-                else settings.packages = updated.ToArray();
-
-                // Explorer already applied this edit. Replay only external membership changes on reopen.
-                string baseline = Path.Combine(Root, "IDE", "workspaces", "applied-defaults.json");
-                if (File.Exists(baseline))
+            WithFolderLock(() => {
+                if (remember)
                 {
-                    var state = Json.Deserialize<Dictionary<string, object>>(File.ReadAllText(baseline));
-                    var known = ((System.Collections.IList)state["folders"]).Cast<string>().Where(p => !SameFolder(p, path)).ToList();
-                    if (settings.folders.Concat(settings.packages).Any(p => SameFolder(p, path))) known.Add(path);
-                    state["folders"] = known;
-                    WriteJson(baseline, state);
+                    // The workspace file holds the chosen membership. Ribbon changes must preserve it.
+                    string file = Path.Combine(Root, "IDE", "workspaces", "explorer-choices.json");
+                    var choices = File.Exists(file) ? Json.Deserialize<List<string>>(File.ReadAllText(file)) : new List<string>();
+                    if (!choices.Any(p => SameFolder(p, path))) {
+                        choices.Add(path);
+                        WriteJson(file, choices);
+                    }
                 }
+                if (!worksheet && !package) return;
+                if (added && !Directory.Exists(path)) throw new DirectoryNotFoundException(path);
+                string[] Update(string[] paths)
+                {
+                    if (!added) return paths.Where(p => !SameFolder(p, path)).ToArray();
+                    return paths.Any(p => SameFolder(p, path)) ? paths : paths.Concat(new[] { path }).ToArray();
+                }
+                var settings = LoadSettings();
+                if (worksheet) settings.folders = Update(settings.folders);
+                if (package) settings.packages = Update(settings.packages);
+                WriteJson(SettingsPath, settings);
             });
         }
 

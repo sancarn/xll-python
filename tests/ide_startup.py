@@ -155,7 +155,7 @@ def verify(base, proc, app):
         assert refresh_count() == before
         change(extra, True)
         answer("load worksheet functions", extra, True)
-        assert extra in map(Path, settings()["folders"])
+        wait_for(lambda: extra in map(Path, settings()["folders"]))
         wait_for(lambda: js("[...document.querySelectorAll('button')].some(b => b.innerText.includes('Yes, I trust'))"))
         ready(js)
         change(extra, False)
@@ -163,17 +163,23 @@ def verify(base, proc, app):
         assert extra in map(Path, settings()["folders"])
         change(packages, False)
         answer("package links", packages, True)
-        assert settings()["packages"] == []
+        wait_for(lambda: settings()["packages"] == [])
         change(scripts, False)
         answer("remove this worksheet folder", scripts, True)
-        assert list(map(Path, settings()["folders"])) == [extra]
+        wait_for(lambda: list(map(Path, settings()["folders"])) == [extra])
     close_ide()
-    with open_ide() as (js, send):
-        wait_for(lambda: ready(js))
-        wait_for(lambda: scratch.name in js("document.querySelector('#files')?.innerText || ''"))
-        roots = js("Array.from(document.querySelectorAll('#files .theia-DirNode'), e => e.title.toLowerCase())")
-        assert str(scratch).lower() in roots and not any(str(p).lower() in roots for p in (scripts, extra, packages)), roots
-    close_ide()
+
+    # Exercise the same persisted changes made by a ribbon add, then removal, of the Explorer-only folder.
+    for configured in ([extra, scratch], [extra]):
+        selected = settings()
+        selected["folders"] = list(map(str, configured))
+        settings_file.write_text(json.dumps(selected), encoding="utf-8")
+        with open_ide() as (js, _):
+            wait_for(lambda: ready(js))
+            wait_for(lambda: scratch.name in js("document.querySelector('#files')?.innerText || ''"))
+            roots = js("Array.from(document.querySelectorAll('#files .theia-DirNode'), e => e.title.toLowerCase())")
+            assert str(scratch).lower() in roots and not any(str(p).lower() in roots for p in (scripts, extra, packages)), roots
+        close_ide()
     print("PASS: accepted and declined startup changes, package-link removal, and independent roots after reopen.", flush=True)
 
 

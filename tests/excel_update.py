@@ -40,6 +40,7 @@ def test(source, action):
         files = [base/"One workbook.xlsx",base/"Two \u03a9.xlsx"]
         proc = subprocess.Popen([excel,"/x","/automation",csv],env=dict(os.environ,XLL_PYTHON_HOME=str(base/"profile")))
         app = restored = None
+        progress = Desktop(backend="win32").window(process=proc.pid, title="Checking for updates")
         def dialogs(pid):
             windows=[]
             def visit(h,_):
@@ -52,6 +53,7 @@ def test(source, action):
             def find():
                 prompt = Desktop(backend="win32").window(process=proc.pid, title="Python for Excel update")
                 if prompt.exists(timeout=0):
+                    assert not progress.exists(timeout=0), "Spinner still visible at the workbook prompt"
                     buttons = {w.window_text(): w for w in prompt.descendants()}
                     assert {"Save all", "Don't save any", "Cancel"} <= buttons.keys(), list(buttons)
                     win32gui.PostMessage(buttons[label].handle,win32con.BM_CLICK,0,0)
@@ -80,6 +82,7 @@ def test(source, action):
             def click():
                 main.child_window(title="Python",control_type="TabItem").select()
                 main.child_window(title="Check for Updates",control_type="Button").invoke()
+                progress.wait("visible", timeout=3)
             click()
             press("Cancel")
             wait_for(lambda:not list(base.glob("*.tmp")))

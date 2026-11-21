@@ -81,11 +81,14 @@ def serve(root):
         try:
             op = request["op"]
             value = None
-            if op == "command":
+            if op in ("command", "macro"):
+                fn = commands[request["name"]]
+                if op == "macro" and not hasattr(fn, "__excel_macro__"):
+                    raise ValueError(f"{request['name']} is not a decorated macro")
                 session = Session(request["excelPipe"])
                 try:
                     with active(session):
-                        _run_command(commands[request["name"]])
+                        _run_command(fn)
                     value = None
                 finally:
                     session.close()
@@ -112,7 +115,7 @@ def serve(root):
         for line in incoming:
             packet = json.loads(line)
             op = packet["request"]["op"]
-            pool = streams if op == "streamRead" else actions if op == "command" else formulas
+            pool = streams if op == "streamRead" else actions if op in ("command", "macro") else formulas
             pool.submit(respond, packet)
         os._exit(0)  # Excel closed the transport; user threads may be waiting indefinitely.
 

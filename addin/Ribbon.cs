@@ -12,7 +12,7 @@ using ExcelDna.Integration.CustomUI;
 namespace PythonExcel
 {
     [ComVisible(true)]
-    public class PythonRibbon : ExcelRibbon
+    public partial class PythonRibbon : ExcelRibbon
     {
         public override string GetCustomUI(string ribbonId) => Published.Current != null ? (string)Published.Current.Manifest["ribbon"] : @"
 <customUI xmlns='http://schemas.microsoft.com/office/2009/07/customui'>

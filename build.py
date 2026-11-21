@@ -185,7 +185,7 @@ def main():
         "/r:" + str(DNA / "ExcelDna.Integration.dll"),
         "/resource:" + str(lean_support) + ",support.zip", "/resource:" + str(lean_versions) + ",versions.txt",
         ROOT / "addin/runtime/Ribbon.cs", *(ROOT / "addin" / (name + ".cs") for name in
-        ("Runtime", "Published", "Functions", "ExcelObjects", "LiveFunction", "ProcessJob")))
+        ("Runtime", "Published", "Functions", "ExcelObjects", "LiveFunction", "ProcessJob", "Automation")))
     template = pack(vs, out, "PythonExcelRuntime", ROOT / "addin/runtime/PythonExcelRuntime.dna", lean_runtime)
     pin = out / "runtime-template.json"
     pin.write_text(json.dumps(dict(tag=release, sha256=sha256(template.read_bytes()).hexdigest())), encoding="ascii")

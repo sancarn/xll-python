@@ -16,6 +16,7 @@ namespace PythonExcel
             {
                 if (Published.Open()) return;
 #if !RUNTIME_ONLY
+                ExcelComAddInHelper.LoadComAddIn(new WorkbenchAutomation());
                 var settings = Runtime.LoadSettings();
                 if (settings.folders.Length != 0 || settings.packages.Length != 0)
                     Functions.Load(settings, false);
@@ -45,11 +46,19 @@ namespace PythonExcel
         sealed class Registration
         {
             internal string Signature;
+            internal IDictionary Entry;
             internal double Id;
         }
 
         static readonly Dictionary<string,Registration> registered = new Dictionary<string,Registration>(StringComparer.OrdinalIgnoreCase);
         static int generation;
+
+        internal static IDictionary Lookup(string name)
+        {
+            if (!registered.TryGetValue(name, out var registration))
+                throw new ArgumentException("Unknown Python function: " + name);
+            return registration.Entry;
+        }
 
 #if !RUNTIME_ONLY
         internal static IList Macros { get; private set; } = new object[0];
@@ -93,7 +102,7 @@ namespace PythonExcel
                 if (!registered.ContainsKey(pair.Key))
                 {
                     Register(pair.Value);
-                    registered.Add(pair.Key, new Registration { Signature=Runtime.Json.Serialize(pair.Value),
+                    registered.Add(pair.Key, new Registration { Entry=pair.Value, Signature=Runtime.Json.Serialize(pair.Value),
                         Id=(double)XlCall.Excel(XlCall.xlfEvaluate, pair.Key) });
                 }
             generation++;

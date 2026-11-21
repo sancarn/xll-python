@@ -252,8 +252,8 @@ def publish(project_file, template, output):
                         "inspect", str(stage), str(metadata)], check=True)
         catalog = json.loads(metadata.read_text(encoding="utf-8"))
         ui = ribbon(project, root, catalog["commands"])
-        if not catalog["functions"] and not ui["actions"]:
-            raise ValueError("Select a ribbon command or export at least one worksheet function")
+        if not catalog["functions"] and not catalog["commands"]:
+            raise ValueError("Export at least one worksheet function or macro, or select a ribbon command")
         archive = Path(temp) / "project.zip"
         with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
             for path in sorted(stage.rglob("*")):

@@ -70,9 +70,12 @@ def verify(app, pid, base, home):
     def read_console(w):
         edits=[e for e in w.descendants(control_type="Edit") if e.element_info.class_name.startswith("WindowsForms10.EDIT")]
         return max((e.get_value() for e in edits),key=len,default="")
-    for label in ("Run Script","Manage Packages","Startup Folders","Open IDE","Check for Updates","Console"):
+    for label in ("Run Script","Manage Packages","Startup Folders","Open IDE","Check for Updates","Console","Compile to XLL"):
         button(label)
-    print("PASS: Python ribbon tab and six actionable buttons",flush=True)
+    click_ribbon("Compile to XLL")
+    compiler = wait_for(lambda: hwnd_for("Compile to XLL", children=True), 30)
+    win32gui.PostMessage(compiler, win32con.WM_CLOSE, 0, 0)
+    print("PASS: Python ribbon opened the packaged compiler",flush=True)
     click_ribbon("Console")
     console = window("Python Console")
     if os.environ.get("XLL_WEB_TEST"):

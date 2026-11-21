@@ -14,6 +14,7 @@ import win32com.client
 import win32con
 import win32gui
 import win32process
+import winerror
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -21,9 +22,14 @@ ROOT = Path(__file__).resolve().parents[1]
 def wait_for(probe, timeout=45):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        value = probe()
-        if value:
-            return value
+        try:
+            value = probe()
+            if value:
+                return value
+        except pythoncom.com_error as error:
+            # Excel can reject automation briefly while a modal ribbon dialog closes.
+            if error.hresult not in (winerror.RPC_E_CALL_REJECTED, winerror.RPC_E_SERVERCALL_RETRYLATER):
+                raise
         time.sleep(.15)
     raise TimeoutError(probe.__name__)
 

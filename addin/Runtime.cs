@@ -94,24 +94,31 @@ namespace PythonExcel
             finally { if (File.Exists(temp)) File.Delete(temp); }
         }
 
-        static Stream OpenArchive(string resource)
+        internal static byte[] Resource(string name, bool optional = false)
         {
-            if (resource == "support")
-                return Assembly.GetExecutingAssembly().GetManifestResourceStream(resource + ".zip");
             var module = GetModuleHandle(ExcelDna.Integration.ExcelDnaUtil.XllPath);
             if (module == IntPtr.Zero) throw new Win32Exception();
-            var entry = FindResource(module, resource == "ide" ? "EXCEL_IDE" : "PYTHON_RUNTIME", new IntPtr(10));
+            var entry = FindResource(module, name, new IntPtr(10));
+            if (entry == IntPtr.Zero && optional && Marshal.GetLastWin32Error() == 1814) return null;
             if (entry == IntPtr.Zero) throw new Win32Exception();
             var data = LockResource(LoadResource(module, entry));
             if (data == IntPtr.Zero) throw new InvalidDataException("Cannot read the embedded Python runtime.");
             var bytes = new byte[SizeofResource(module, entry)];
             Marshal.Copy(data, bytes, 0, bytes.Length);
-            return new MemoryStream(bytes, false);
+            return bytes;
         }
 
-        static string Unpack(string resource, string hash)
+        static Stream OpenArchive(string resource)
         {
-            string dir = Path.Combine(Root, resource + "-" + hash.Substring(0, 16));
+            if (resource == "support") return Assembly.GetExecutingAssembly().GetManifestResourceStream("support.zip");
+            return new MemoryStream(Resource(resource == "ide" ? "EXCEL_IDE" : "PYTHON_" + resource.ToUpperInvariant()), false);
+        }
+
+        internal static string Unpack(string resource, string hash)
+        {
+            string root = Published.Current == null ? Root : Path.Combine(Root, "published");
+            Directory.CreateDirectory(root);
+            string dir = Path.Combine(root, resource + "-" + hash.Substring(0, 16));
             if (Directory.Exists(dir)) return dir;
             string temp = dir + "." + Guid.NewGuid().ToString("N").Substring(0,8);
             Directory.CreateDirectory(temp);
@@ -135,7 +142,8 @@ namespace PythonExcel
                             using (var dest = File.Create(file)) source.CopyTo(dest);
                         }
                 }
-                Directory.Move(temp, dir);
+                try { Directory.Move(temp, dir); }
+                catch (IOException) when (Directory.Exists(dir)) { }
                 return dir;
             }
             finally { if (Directory.Exists(temp)) Directory.Delete(temp, true); }
@@ -168,7 +176,7 @@ namespace PythonExcel
             }
         }
 
-        static void Install()
+        internal static void Install(bool bootstrapPip = true)
         {
             Directory.CreateDirectory(Root);
             string[] versions;
@@ -181,6 +189,7 @@ namespace PythonExcel
                 {
                     Home = Unpack("runtime", versions[0].Trim());
                     Support = Unpack("support", versions[1].Trim());
+                    if (!bootstrapPip) return;
                     string ready = Path.Combine(Home, ".pip-ready");
                     if (!File.Exists(ready) || !File.Exists(Path.Combine(Home, "Lib", "site-packages", "pip", "__main__.py")))
                     {
@@ -239,6 +248,7 @@ namespace PythonExcel
 
         internal static object Request(object message)
         {
+            if (Published.Current != null) return Published.Current.Request(message);
             Ensure();
             int ok;
             string reply = Take(invoke(Json.Serialize(message), out ok));

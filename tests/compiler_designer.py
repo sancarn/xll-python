@@ -10,11 +10,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 import _xll_designer as ui
 
 
-def main(project, template, output):
+def main(project, template, output, wheel=None):
     window = tk.Tk()
     app = ui.Designer(window, template)
     ui.filedialog.askopenfilename = lambda **kw: str(project)
     app.open()
+    if wheel:
+        app.packages.delete(0, "end")
+        ui.filedialog.askopenfilenames = lambda **kw: [str(wheel)]
+        app.wheel()
+        assert app.packages.get(0) == wheel.as_posix()
+        app.save()
+        window.destroy()
+        return
     # Use the same action as "Include selected" in the Packages tab.
     spec = "xll_fixture==1"
     index = app.installed.get(0, "end").index(spec)

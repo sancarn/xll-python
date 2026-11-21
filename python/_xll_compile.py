@@ -86,7 +86,7 @@ def resources(target, items):
     try:
         for name, data in items.items():
             kind = ctypes.cast(ctypes.c_wchar_p("DNA"), ctypes.c_void_p) if name == "__MAIN__" else 10
-            if not update(handle, kind, name, 0, data, len(data)):
+            if not update(handle, kind, name, 0, data, len(data) if data is not None else 0):
                 raise ctypes.WinError(ctypes.get_last_error())
     except BaseException:
         end(handle, True)
@@ -144,12 +144,14 @@ def publish(project_file, template, output):
             dest = stage / "src" / path.relative_to(root)
             dest.parent.mkdir(exist_ok=True, parents=True)
             shutil.copyfile(path, dest)
-        (stage / "project.json").write_text(json.dumps(dict(entries=project["entries"])), encoding="utf-8")
+        (stage / "project.json").write_text(json.dumps(dict(id=project["id"], entries=project["entries"])), encoding="utf-8")
         requirements = []
         wheels = []
         for spec in project["packages"]:
             if spec.lower().endswith(".whl"):
-                wheel = inside(root, spec)
+                wheel = (root / spec).resolve(strict=True)
+                if not wheel.is_file():
+                    raise ValueError(f"Expected a wheel file: {spec}")
                 requirements.append(str(wheel))
                 wheels.extend(["--find-links", str(wheel.parent)])
             elif re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*(==[A-Za-z0-9][A-Za-z0-9.!+_-]*)?", spec):
@@ -178,7 +180,7 @@ def publish(project_file, template, output):
         built = Path(temp) / "output.xll"
         shutil.copyfile(template, built)
         resources(built, {"PYTHON_PROJECT": data, "PYTHON_MANIFEST": json.dumps(info).encode(),
-                          "__MAIN__": packed_dna(template, project["name"])})
+                          "__MAIN__": packed_dna(template, project["name"]), "EXCEL_IDE": None})
         os.replace(built, output)
 
 

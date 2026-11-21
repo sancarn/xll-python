@@ -4,6 +4,8 @@ import importlib
 import inspect
 import json
 import os
+import shutil
+import tempfile
 from pathlib import Path
 import sys
 import threading
@@ -54,6 +56,18 @@ def serve(root):
     incoming = sys.stdin.buffer
     # Only this loop consumes requests, including when a user script calls input().
     sys.stdin = open(os.devnull, encoding="utf-8")
+    # Keep relative writes private and separate from the importable code. Two Excel
+    # instances may open the same add-in for the first time concurrently.
+    work = root / "work"
+    if not work.exists():
+        with tempfile.TemporaryDirectory(dir=root) as temp:
+            seed = Path(temp) / "work"
+            shutil.copytree(root / "src", seed)
+            try:
+                seed.rename(work)
+            except FileExistsError:
+                pass
+    os.chdir(work)
     host, commands, _ = load(root)
     from _xll_application import Session, active
     from concurrent.futures import ThreadPoolExecutor

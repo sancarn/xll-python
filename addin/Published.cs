@@ -75,6 +75,7 @@ namespace PythonExcel
         sealed class Worker : IDisposable
         {
             readonly Process process;
+            readonly ProcessJob job = new ProcessJob();
             readonly object gate = new object();
             readonly Dictionary<long,TaskCompletionSource<string>> pending = new Dictionary<long,TaskCompletionSource<string>>();
             long sequence;
@@ -87,6 +88,8 @@ namespace PythonExcel
                 info.WorkingDirectory = Path.Combine(path, "src");
                 info.RedirectStandardInput = true;
                 process = Process.Start(info);
+                try { job.Add(process); }
+                catch { process.Kill(); process.Dispose(); job.Dispose(); throw; }
                 process.ErrorDataReceived += (s,e) => { if (!String.IsNullOrEmpty(e.Data)) Runtime.Log(e.Data); };
                 process.BeginErrorReadLine();
                 _ = ReadReplies();
@@ -149,7 +152,7 @@ namespace PythonExcel
                     try { process.StandardInput.Close(); }
                     finally
                     {
-                        if (!process.HasExited) process.Kill();
+                        job.Dispose();
                         process.Dispose();
                     }
                 }

@@ -119,9 +119,35 @@ def main():
                 subprocess.run([python, "-I", ROOT/"tests/compiler_designer.py", source, template, output],
                                check=True, env=author_env)
             else:
+                wheelhouse = base / "external wheelhouse"
+                wheelhouse.mkdir()
+                for path in source.parent.glob("*.whl"):
+                    path.rename(wheelhouse/path.name)
+                wheel = next(wheelhouse.glob("xll_fixture-*.whl"))
+                subprocess.run([python, "-I", ROOT/"tests/compiler_designer.py", source, template, output, wheel],
+                               check=True, env=build_env)
                 subprocess.run([python, "-I", ROOT/"python/_xll_compile.py", source, template, output],
                                check=True, env=build_env)
             shutil.rmtree(source.parent)
+            outputs.append(output)
+        # Same source and dependencies, distinct saved projects and writable state.
+        state_dir = base / "state-project"
+        state_dir.mkdir()
+        (state_dir / "state.py").write_text(
+            "from pathlib import Path\nfrom xll_python import Application\n"
+            "def increment():\n    counter = Path('count.txt')\n"
+            "    count = int(counter.read_text()) + 1 if counter.exists() else 1\n"
+            "    counter.write_text(str(count))\n    Path('state.py').write_text('working copy')\n"
+            "    assert 'def increment' in Path(__file__).read_text()\n"
+            "    Application.ActiveSheet.Range('D1').Value2 = count\n")
+        for name in ["StateA", "StateB"]:
+            manifest = state_dir / "project.json"
+            manifest.write_text(json.dumps(dict(id=str(uuid.uuid4()), name=name, entries=["state.py"],
+                files=[], packages=[], tabs=[dict(label=name, groups=[dict(label="State", buttons=[
+                    dict(label="Increment", command="state.increment", imageMso="MacroPlay")])])])))
+            output = base / (name+".xll")
+            subprocess.run([python, "-I", ROOT/"python/_xll_compile.py", manifest, template, output],
+                           env=build_env, check=True)
             outputs.append(output)
         shutil.rmtree(home)
         book = base/"test.csv"
@@ -162,6 +188,11 @@ def main():
                 wait_for(icon_visible, 10)
                 control.invoke()
                 wait_for(lambda: sheet.Range(f"B{i}").Value2 == f"{label} {i}")
+            for label, expected in [("StateA", 1), ("StateB", 1), ("StateA", 2)]:
+                sheet.Range("D1").ClearContents()
+                main.child_window(title=label, control_type="TabItem").select()
+                main.child_window(title="Increment", control_type="Button").invoke()
+                wait_for(lambda: sheet.Range("D1").Value2 == expected)
             app.Calculation = -4135
             sheet.Range("E1:E10000").Value2 = tuple((1,) for _ in range(10000))
             sheet.Range("F1:F10000").FormulaR1C1 = "=Pkg.First(RC[-1])"

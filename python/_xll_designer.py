@@ -190,12 +190,10 @@ class Designer:
                 raise ValueError("Place project files beneath the project directory: " + str(root))
             add(box, [path.relative_to(root).as_posix()])
 
-    def copy_asset(self, path, folder):
+    def import_image(self, path):
         root = self.file.parent
         src = Path(path)
-        if folder == "wheels" and src.is_relative_to(root):
-            return src.relative_to(root).as_posix()
-        dest = root / folder / (sha256(src.read_bytes()).hexdigest()[:16] + ".png" if folder == "ribbon-images" else src.name)
+        dest = root / "ribbon-images" / (sha256(src.read_bytes()).hexdigest()[:16] + ".png")
         dest.parent.mkdir(exist_ok=True)
         if src.resolve() != dest.resolve():
             if dest.exists() and dest.read_bytes() != src.read_bytes():
@@ -208,7 +206,9 @@ class Designer:
         if not self.root():
             return
         for path in filedialog.askopenfilenames(filetypes=[("Python wheels","*.whl")]):
-            add(self.packages, [self.copy_asset(path, "wheels")])
+            wheel = Path(path)
+            relative = wheel.relative_to(self.file.parent) if wheel.is_relative_to(self.file.parent) else wheel
+            add(self.packages, [relative.as_posix()])
 
     def add_package(self):
         spec = simpledialog.askstring("Include package", "Package name or name==version")
@@ -310,7 +310,7 @@ class Designer:
         def choose():
             path = filedialog.askopenfilename(parent=dialog, filetypes=[("PNG image","*.png")])
             if path:
-                image.set(self.copy_asset(path, "ribbon-images"))
+                image.set(self.import_image(path))
         bar = row(form)
         button(bar, "Import PNG…", choose)
         button(bar, "Use Office icon", lambda: image.set(""))

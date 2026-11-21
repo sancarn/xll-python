@@ -53,3 +53,21 @@ window.addEventListener("hashchange", () => {
   const selected = panels.find(panel => "#" + panel.id === location.hash);
   if (selected) selected.scrollIntoView();
 });
+
+const feedPreview = tour.querySelector(".feed-preview");
+const fullSize = feedPreview.querySelector(".capture");
+const feedImage = fullSize.querySelector("img");
+const playback = feedPreview.querySelector("button");
+const still = fullSize.href;
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+function playRecording(play) {
+  fullSize.href = play ? playback.dataset.recording : still;
+  feedImage.src = fullSize.href;
+  playback.textContent = play ? "Stop recording" : "Play recording";
+}
+
+playback.hidden = false;
+playRecording(!reducedMotion.matches);
+playback.addEventListener("click", () => playRecording(fullSize.href === still));
+reducedMotion.addEventListener("change", () => playRecording(!reducedMotion.matches));

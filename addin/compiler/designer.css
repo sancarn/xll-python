@@ -71,6 +71,14 @@ footer:has(#projectActions[hidden]):has(#status:empty) { display: none }
 .big .glyph { font-size: 28px; height: 32px; width: 32px }
 #properties { padding: 14px 16px }
 #properties label + label,#buttonFields,.iconFields,.check { margin-top: 9px }
+.macroPicker { position: relative; max-width: 480px }
+.macroPicker #command { padding-right: 38px }
+#showMacros { position: absolute; top: 1px; right: 1px; bottom: 1px; border: 0; padding: 0 10px }
+#macroOptions { position: absolute; z-index: 1; top: 100%; width: 100%; max-height: min(180px, 25vh); overflow-y: auto; background: white; border: 1px solid #b7c7bc; border-radius: 4px; box-shadow: 0 3px 10px #173e3026 }
+#macroOptions.above { top: auto; bottom: 100% }
+#macroOptions > div { padding: 6px 9px; overflow-wrap: anywhere }
+#macroOptions [role=option] { cursor: pointer }
+#macroOptions [role=option]:hover, #macroOptions [aria-selected=true] { background: #dfefe4 }
 .iconFields { align-items: end; flex-wrap: wrap }
 .check { display: flex; align-items: center; gap: 5px }
 #packages .actions { margin-top: 9px }

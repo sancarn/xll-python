@@ -55,6 +55,15 @@ def drive_designer(python, support, source, template, output, env, wheel=None):
                 original = json.loads(source.read_text())
                 assert js("project") == original
                 assert not js("$('optimise').checked")
+                section("ribbon")
+                js("document.querySelector('.control').click(); $('command').focus()")
+                send("Input.insertText", text="missing")
+                assert js("$('macroOptions').innerText") == "No matching macros"
+                js("$('label').focus()")
+                assert js("$('command').value") == "reports.refresh"
+                click("showMacros")
+                js("[...$('macroOptions').children].find(o => o.textContent.includes('Saved binding')).click()")
+                assert js("project") == original
                 section("packages")
                 js("$('included').querySelector('button').click()")
                 picker("wheel", wheel)
@@ -105,9 +114,23 @@ def drive_designer(python, support, source, template, output, env, wheel=None):
                 click("addGroup")
                 fill("label", "Reports")
                 click("addButton")
-                assert js("Array.from($('command').options, o=>o.value)") == ["", "reports.refresh"]
-                fill("command", "reports.refresh", "change")
+                click("showMacros")
+                options = "Array.from($('macroOptions').querySelectorAll('[role=option]'), o=>o.textContent)"
+                assert js(options) == ["Archive (reports.archive)", "Refresh report (reports.refresh)"]
+                send("Input.insertText", text="TS.ARC")
+                assert js(options) == ["Archive (reports.archive)"]
+                js("$('command').select()")
+                send("Input.insertText", text="SH REPORT")
+                assert js(options) == ["Refresh report (reports.refresh)"]
+                js("$('command').dispatchEvent(new KeyboardEvent('keydown', {key:'Enter', isComposing:true}))")
+                assert js("selection.item.command") == ""
+                for key, vk in [("ArrowDown", 40), ("Enter", 13)]:
+                    for event in ("keyDown", "keyUp"):
+                        send("Input.dispatchKeyEvent", type=event, key=key, windowsVirtualKeyCode=vk)
+                js("$('label').focus()")
                 assert js("$('label').value") == "Refresh report"
+                assert js("selection.item.command") == "reports.refresh"
+                assert js("selection.item.macro") is True
                 fill("label", "Refresh First")
                 picker("importImage", source.parent/"icon.png")
                 wait_for(lambda: js("document.querySelector('.control.big img')?.naturalWidth"))

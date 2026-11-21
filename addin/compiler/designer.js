@@ -276,6 +276,7 @@ function renderPreview() {
   }
 }
 function renderRibbon() {
+  closeMacroPicker();
   renderPreview();
   const {tab, group, item} = selection;
   const current = selectedNode();
@@ -288,11 +289,6 @@ function renderRibbon() {
   if (!current) return;
   $("label").value = current.label;
   if (item) {
-    const options = macros.map(m => new Option(m.label + " (" + m.target + ")", m.target));
-    if (item.command && !macros.some(m => m.target === item.command))
-      options.push(new Option(item.command + " (saved binding)", item.command));
-    $("command").replaceChildren(new Option(macros.length ? "Choose a macro" : "No @macro functions found", ""), ...options);
-    $("command").value = item.command;
     $("officeIcon").value = item.imageMso || "";
     $("large").checked = !!item.large;
     $("clearImage").hidden = !item.image;
@@ -317,14 +313,80 @@ $("removeNode").onclick = () => {
   list.splice(list.indexOf(selectedNode()), 1);
   select(group ? tab : project.tabs[0], item ? group : null);
 };
-$("command").onchange = () => {
+const command = $("command"), macroOptions = $("macroOptions");
+function closeMacroPicker() {
+  macroOptions.hidden = true;
+  command.setAttribute("aria-expanded", "false");
+  command.removeAttribute("aria-activedescendant");
+  command.value = selection.item?.command || "";
+}
+function chooseMacro(macro) {
   const item = selection.item;
-  const macro = macros.find(m => m.target === $("command").value);
-  if (macro && (!item.label.trim() || item.label === "New button" || item.label === macros.find(m => m.target === item.command)?.label))
-    item.label = macro.label;
-  item.command = $("command").value;
-  item.macro = true;
+  if (macro.target !== item.command) {
+    if (macro.target && (!item.label.trim() || item.label === "New button" || item.label === macros.find(m => m.target === item.command)?.label))
+      item.label = macro.label;
+    item.command = macro.target;
+    item.macro = true;
+  }
   renderRibbon();
+  command.select();
+}
+function openMacroPicker(query = "") {
+  const target = selection.item.command;
+  const choices = [...macros];
+  if (target && !macros.some(m => m.target === target)) choices.push({label: "Saved binding", target});
+  const search = query.trim().toLowerCase();
+  const matches = choices.filter(m => m.label.toLowerCase().includes(search) || m.target.toLowerCase().includes(search));
+  if (!search && target) matches.push({label: "Clear binding", target: ""});
+  macroOptions.replaceChildren(...matches.map((m, i) => {
+    const option = node("div", m.target ? m.label + " (" + m.target + ")" : m.label);
+    option.id = "macroOption" + i;
+    option.setAttribute("role", "option");
+    option.setAttribute("aria-selected", "false");
+    option.onclick = () => chooseMacro(m);
+    return option;
+  }));
+  if (!matches.length) macroOptions.append(node("div", choices.length ? "No matching macros" : "No @macro functions found"));
+  command.removeAttribute("aria-activedescendant");
+  command.setAttribute("aria-expanded", "true");
+  macroOptions.hidden = false;
+  macroOptions.classList.toggle("above", command.getBoundingClientRect().bottom + macroOptions.offsetHeight >
+    $("editor").getBoundingClientRect().bottom);
+  macroOptions.scrollTop = 0;
+}
+command.onfocus = () => command.select();
+command.onclick = () => { if (macroOptions.hidden) openMacroPicker(); };
+command.oninput = () => openMacroPicker(command.value);
+command.onblur = closeMacroPicker;
+// Keep focus in the input while choosing an option or toggling the list.
+for (const el of [macroOptions, $("showMacros")]) el.onmousedown = e => e.preventDefault();
+$("showMacros").onclick = () => {
+  command.focus();
+  if (macroOptions.hidden) openMacroPicker();
+  else closeMacroPicker();
+};
+command.onkeydown = e => {
+  if (e.isComposing) return;
+  const active = $(command.getAttribute("aria-activedescendant"));
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    if (macroOptions.hidden) openMacroPicker();
+    const options = macroOptions.querySelectorAll("[role=option]");
+    const next = e.key === "ArrowDown" ? active?.nextElementSibling || options[0] :
+      active?.previousElementSibling || options[options.length - 1];
+    if (next) {
+      active?.setAttribute("aria-selected", "false");
+      next.setAttribute("aria-selected", "true");
+      command.setAttribute("aria-activedescendant", next.id);
+      next.scrollIntoView({block: "nearest"});
+    }
+  } else if (e.key === "Enter" && !macroOptions.hidden) {
+    e.preventDefault();
+    (active || macroOptions.querySelector("[role=option]"))?.click();
+  } else if (e.key === "Escape") {
+    closeMacroPicker();
+    command.select();
+  }
 };
 for (const [id, key] of [["label","label"], ["officeIcon","imageMso"], ["large","large"]]) {
   $(id).oninput = () => {

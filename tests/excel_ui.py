@@ -15,6 +15,19 @@ from pywinauto.controls.uiawrapper import UIAWrapper
 from excel_smoke import wait_for
 
 
+def fixture_wheel(base, name):
+    wheel = base / f"{name}-1.0-py3-none-any.whl"
+    info = f"{name}-1.0.dist-info/"
+    with zipfile.ZipFile(wheel, "w") as z:
+        files = {name + ".py": "VALUE = 42\n",
+                 info + "METADATA": f"Metadata-Version: 2.1\nName: {name}\nVersion: 1.0\n",
+                 info + "WHEEL": "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n"}
+        files[info + "RECORD"] = "".join(f"{k},,\n" for k in [*files, info + "RECORD"])
+        for path, source in files.items():
+            z.writestr(path, source)
+    return wheel
+
+
 def verify(app, pid, base, home):
     app.Visible = True
     desktop = Desktop(backend="uia")
@@ -57,7 +70,7 @@ def verify(app, pid, base, home):
     def read_console(w):
         edits=[e for e in w.descendants(control_type="Edit") if e.element_info.class_name.startswith("WindowsForms10.EDIT")]
         return max((e.get_value() for e in edits),key=len,default="")
-    for label in ("Run Script","Package Installer","Startup Folders","Open IDE","Check for Updates","Console"):
+    for label in ("Run Script","Manage Packages","Startup Folders","Open IDE","Check for Updates","Console"):
         button(label)
     print("PASS: Python ribbon tab and six actionable buttons",flush=True)
     click_ribbon("Console")
@@ -120,25 +133,30 @@ def verify(app, pid, base, home):
     assert sheet.Range("M2").Text in ("#NAME?", "#VALUE!"), sheet.Range("M2").Text
     print("PASS: live refresh reloaded source and imports, updated signatures, added and removed functions, and recalculated existing cells",flush=True)
 
-    wheel=base/"xll_probe-1.0-py3-none-any.whl"
-    info="xll_probe-1.0.dist-info/"
-    with zipfile.ZipFile(wheel,"w") as z:
-        files={"xll_probe.py":"VALUE = 42\n",info+"METADATA":"Metadata-Version: 2.1\nName: xll-probe\nVersion: 1.0\n",
-               info+"WHEEL":"Wheel-Version: 1.0\nGenerator: smoke\nRoot-Is-Purelib: true\nTag: py3-none-any\n"}
-        files[info+"RECORD"]="".join(f"{k},,\n" for k in [*files,info+"RECORD"])
-        for name,src in files.items(): z.writestr(name,src)
-    click_ribbon("Package Installer")
-    installer=window("Python package installer")
-    command=next(e for e in installer.descendants(control_type="Edit") if not e.iface_value.CurrentIsReadOnly)
+    wheel=fixture_wheel(base, "xll_probe")
+    click_ribbon("Manage Packages")
+    installer=window("Manage Packages")
     native_wheel=os.environ.get("XLL_TEST_NATIVE_WHEEL")
     install=f'install --no-index "{wheel}"'
     if native_wheel:
         install+=' "'+str(Path(native_wheel).resolve(strict=True))+'"'
-    command.set_edit_text(install)
-    installer.child_window(title="Run",control_type="Button").invoke()
-    wait_for(lambda:"pip exited with code 0" in read_console(installer),35)
+    if os.environ.get("XLL_WEB_TEST"):
+        from web_editor import verify_packages, verify_package_log
+        for name in ("openpyxl", "xlsxwriter"):
+            fixture_wheel(base, name)
+        verify_packages(base, install)
+        close(installer)
+        wait_for(lambda: not hwnd_for("Manage Packages"))
+        click_ribbon("Manage Packages")
+        installer=window("Manage Packages")
+        verify_package_log(base)
+    else:
+        installer.child_window(title="Advanced",control_type="TabItem").select()
+        installer.child_window(title="pip",control_type="Edit").set_edit_text(install)
+        installer.child_window(title="Run",control_type="Button").invoke()
+        wait_for(lambda: installer.child_window(title="Complete · exit 0",control_type="Text").exists(timeout=.1))
     close(installer)
-    print("PASS: pip-only ribbon terminal installed a wheel offline",flush=True)
+    print("PASS: Manage Packages installed a wheel offline",flush=True)
 
     script=base/"interactive.py"
     script.write_text("from xll_probe import VALUE\namount = VALUE + 1\nprint('FROM_XLL', amount)\n",encoding="utf-8")

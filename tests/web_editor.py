@@ -111,6 +111,44 @@ def verify_reopened_console(base):
         print("PASS: closing an active console lets its command finish and reopening starts a fresh session", flush=True)
 
 
+def verify_packages(base, install):
+    with page(base/"profile"/"PackagesWebView2", "https://python-packages.example/") as (js, send):
+        wait_for(lambda: js("document.querySelector('[aria-label=\"Add openpyxl\"]') !== null"))
+        js("document.querySelector('[aria-label=\"Add openpyxl\"]').click();"
+           "document.querySelector('[aria-label=\"Add xlsxwriter\"]').click()")
+        wait_for(lambda: js("document.querySelector('[data-name=openpyxl] .running') && "
+                            "document.querySelector('[data-name=xlsxwriter] .actions').innerText === 'Queued'"))
+        js("document.querySelector('#advanced-tab').click(); document.querySelector('#command').focus()")
+        send("Input.insertText", text="pip " + install)
+        js("document.querySelector('#prompt').requestSubmit()")
+        wait_for(lambda: js("document.querySelectorAll('.job').length === 3"))
+
+
+def verify_package_log(base):
+    with page(base/"profile"/"PackagesWebView2", "https://python-packages.example/") as (js, send):
+        wait_for(lambda: js("document.querySelectorAll('#results .done').length === 2"))
+        js("document.querySelector('#installed-tab').click()")
+        wait_for(lambda: js("document.querySelector('#distributions').innerText.toLowerCase().replaceAll('_','-').includes('xll-probe')"))
+        js("document.querySelector('#advanced-tab').click()")
+        assert js("Array.from(document.querySelectorAll('.job code'), e => e.innerText).slice(0, 2)") == [
+            "pip install openpyxl", "pip install xlsxwriter"]
+        assert js("document.querySelectorAll('.job .done').length") == 3
+        assert js("document.querySelector('.job:last-child pre').innerText.includes('Successfully installed')")
+        js("document.querySelector('#browse-tab').click(); document.querySelector('[aria-label=\"Add numpy\"]').click()")
+        wait_for(lambda: js("!!document.querySelector('[aria-label=\"Retry numpy\"]')"))
+        js("document.querySelector('[aria-label=\"View log for numpy\"]').click()")
+        assert js("document.activeElement.matches('.job:last-child') && document.activeElement.innerText.includes('No matching distribution')")
+        from excel_ui import fixture_wheel
+        fixture_wheel(base, "numpy")
+        js("document.querySelector('#browse-tab').click(); document.querySelector('[aria-label=\"Retry numpy\"]').click()")
+        wait_for(lambda: js("!!document.querySelector('[data-name=numpy] .done')"))
+        js("document.querySelector('#search').focus()")
+        send("Input.insertText", text="beautifulsoup4")
+        wait_for(lambda: js("document.querySelector('#results .row')?.dataset.name.toLowerCase() === 'beautifulsoup4'"), 90)
+        wait_for(lambda: js("!!document.querySelector('#results .row p')?.innerText"))
+        print("PASS: queued Browse and Advanced installs survived reopen, inventory and logs agree, failed install links to its log, live PyPI search returns metadata", flush=True)
+
+
 def verify_editor(ide, script, read_console, action, pick_file):
     base=script.parent
     with page(base/"profile"/"WebView2","https://vscode.dev/") as (js, send):

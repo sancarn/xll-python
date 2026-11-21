@@ -110,8 +110,9 @@ def main():
     with zipfile.ZipFile(support,"w",zipfile.ZIP_DEFLATED) as z:
         for f in sorted((ROOT/"python").glob("*.py")):
             z.write(f,f.name)
-        for f in sorted((ROOT/"addin"/"repl").iterdir()):
-            z.write(f, "repl/" + f.name)
+        for folder in ("repl", "packages"):
+            for f in sorted((ROOT/"addin"/folder).iterdir()):
+                z.write(f, folder + "/" + f.name)
         for f in (out/"bridge.dll", WEB/"build/native/x64/WebView2Loader.dll"):
             z.write(f,f.name)
         z.write(ROOT/"examples/functions.py","examples/functions.py")

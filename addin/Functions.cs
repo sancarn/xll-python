@@ -25,7 +25,7 @@ namespace PythonExcel
             }
         }
 
-        public void AutoClose() { LiveFunction.DisconnectAll(); ConsoleWindow.Shutdown(); IdeWindow.Shutdown(); }
+        public void AutoClose() { LiveFunction.DisconnectAll(); ConsoleWindow.Shutdown(); PipWindow.Shutdown(); IdeWindow.Shutdown(); }
     }
 
     internal static class Functions

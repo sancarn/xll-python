@@ -1,0 +1,83 @@
+* { box-sizing: border-box }
+:root { color-scheme: light; font: 14px/1.45 "Segoe UI", sans-serif; color: #20382e; background: #fafbf9; --line: #cfdad3; --green: #176347 }
+body { margin: 0; height: 100vh; display: flex; flex-direction: column }
+[hidden] { display: none !important }
+header, footer, nav, .sectionTitle, .actions, .iconFields { display: flex; align-items: center; gap: 10px }
+header { padding: 12px 26px; min-height: 52px; background: #173e30; color: white; font-size: 16px }
+.mark { display: grid; place-items: center; width: 28px; height: 28px; font-weight: 700; font-size: 18px; background: #3d8766; border: 1px solid #8ab99c; border-radius: 5px }
+#home { margin-left: auto; background: transparent; border-color: #719381; color: white }
+button, select, input { font: inherit }
+button { color: #254636; background: white; border: 1px solid #b7c7bc; border-radius: 5px; padding: 6px 13px; cursor: pointer }
+button:hover { background: #edf4ee; border-color: #82a58d }
+button:disabled { opacity: .52; cursor: default }
+:focus-visible { outline: 2px solid #16784c; outline-offset: 2px }
+.primary { background: var(--green); border-color: var(--green); color: white; font-weight: 600 }
+.primary:hover { background: #124c37 }
+h1,h2,h3,p { margin: 0 }
+h1 { font-size: 28px; letter-spacing: -.7px; line-height: 1.25; margin-bottom: 16px }
+h2 { font-size: 17px; margin: 18px 0 10px }
+h3 { font-size: 15px }
+p,small { color: #52665a }
+#welcome { flex: 1; display: grid; place-items: center; padding: 30px; overflow: auto; background: linear-gradient(150deg,#eaf3eb,#fafbf9 65%) }
+.start { width: min(620px,100%) }
+.start h1 { font-size: 36px; margin-bottom: 8px }
+.choices { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 24px 0 14px }
+.choices button { text-align: left; padding: 20px; border-radius: 10px; display: grid; gap: 4px }
+.choices b { font-size: 18px }
+.choiceIcon { background: #e4f0e7; color: var(--green); border-radius: 6px; width: 34px; height: 34px; text-align: center; font-size: 22px; margin-bottom: 10px }
+#drop { padding: 14px; text-align: center; border: 1px dashed #9aafa0; border-radius: 7px; color: #496654 }
+#welcome.over #drop { background: #d4ecdb; border-color: var(--green) }
+#editor { flex: 1; min-height: 0; display: flex; flex-direction: column }
+nav { padding: 0 26px; background: white; border-bottom: 1px solid var(--line); gap: 17px }
+nav button,.officeTabs button { border: 0; border-bottom: 3px solid transparent; border-radius: 0; padding: 12px 3px 9px; background: transparent }
+nav .active,.officeTabs .active { color: var(--green); border-bottom-color: var(--green); font-weight: 650 }
+.scroll { overflow: auto; flex: 1; padding: 24px 28px }
+section { max-width: 1160px; margin: 0 auto }
+label { display: block; font-weight: 600; font-size: 13px }
+input:not([type=checkbox]), select { display: block; width: 100%; max-width: 480px; margin-top: 4px; padding: 7px 9px; color: #20382e; background: white; border: 1px solid #b7c7bc; border-radius: 4px }
+.sectionTitle { justify-content: space-between; margin: 20px 0 9px }
+.sectionTitle h2 { margin: 0 }
+#folder, #status, .list span { overflow-wrap: anywhere }
+.workspace,.office,.list,#properties { background: white; border: 1px solid var(--line); border-radius: 7px }
+.workspace { display: grid; grid-template-columns: minmax(220px,38%) 1fr; min-height: 246px; height: clamp(246px,43vh,550px); overflow: hidden }
+.tree,.filePane { overflow: auto; padding: 12px }
+.tree { border-right: 1px solid var(--line); background: #f4f7f4 }
+.tree details { margin-left: 10px }
+.tree summary { cursor: pointer; padding: 4px 0; font-weight: 600 }
+.file { display: flex; gap: 6px; align-items: center; text-align: left; background: transparent; border: 0; padding: 4px 6px; width: 100% }
+.file span { overflow-wrap: anywhere }
+.file small { margin-left: auto; font-size: 11px; background: #dfede3; color: #205d3a; border-radius: 4px; padding: 1px 4px }
+.file.active,.selected { background: #dfefe4; box-shadow: inset 0 0 0 1px #88af96 }
+.filePane h3 { overflow-wrap: anywhere; margin-bottom: 6px }
+.filePane pre { color: #344b40; tab-size: 4; font: 12px/1.55 Consolas, monospace }
+footer { padding: 11px 24px; background: white; border-top: 1px solid var(--line); justify-content: space-between }
+footer:has(#projectActions[hidden]):has(#status:empty) { display: none }
+#status { white-space: pre-wrap; overflow-y: auto; max-height: 84px; color: #435f4d; font-size: 13px }
+#status.error { color: #9c3229 }
+.actions { flex-shrink: 0 }
+.office { overflow-x: auto; padding: 0 12px 10px; background: #f5f7f6 }
+.officeTabs,.groups,.controls { display: flex; align-items: stretch; gap: 6px }
+.officeTabs { border-bottom: 1px solid var(--line); min-height: 40px }
+.groups { padding-top: 8px; min-height: 108px; align-items: stretch }
+.groups p,.officeTabs p { align-self: center; padding: 8px }
+.group { display: flex; flex-direction: column; padding: 3px 8px; border-right: 1px solid var(--line); min-width: 92px }
+.groupName { margin-top: auto; font-size: 12px; width: 100% }
+.controls { flex: 1; display: grid; grid-auto-flow: column; grid-template-rows: repeat(3, minmax(28px, max-content)); align-items: start; justify-content: start; gap: 0 4px; padding-bottom: 3px }
+.office .group button { background-color: transparent; border: 1px solid transparent; padding: 3px 6px }
+.office .group button:hover { border-color: #9bb7a4 }
+.control { display: flex; align-items: center; gap: 3px; white-space: nowrap }
+.control.big { flex-direction: column; grid-row: span 3 }
+.glyph { color: #246f4b; font-size: 16px; line-height: 1; height: 16px; width: 16px; object-fit: contain }
+.big .glyph { font-size: 28px; height: 32px; width: 32px }
+#properties { padding: 14px 16px }
+#properties label + label,#buttonFields,.iconFields,.check { margin-top: 9px }
+.iconFields { align-items: end; flex-wrap: wrap }
+.check { display: flex; align-items: center; gap: 5px }
+#packages .actions { margin-top: 9px }
+.list { max-height: 160px; overflow: auto }
+.list > div { display: flex; align-items: center; justify-content: space-between; padding: 5px 10px; gap: 8px; border-bottom: 1px solid #e6ede7 }
+.list p { padding: 9px }
+dialog { color: inherit; border: 1px solid var(--line); border-radius: 9px; padding: 20px; box-shadow: 0 12px 44px #173e3026 }
+dialog h2 { margin-top: 0 }
+dialog .actions { margin-top: 18px; justify-content: flex-end }
+dialog::backdrop { background: #16392955 }

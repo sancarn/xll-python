@@ -108,6 +108,10 @@ def main():
         "/link", "/LIBPATH:"+str(dev/"libs"), "/OUT:"+str(out/"bridge.dll"), cwd=out, env=env)
     web_lib = WEB / "lib/net462"
     web_dlls = [web_lib / ("Microsoft.Web.WebView2."+name+".dll") for name in ("Core","WinForms")]
+    csc = vs/"MSBuild/Current/Bin/Roslyn/csc.exe"
+    run(csc, "/nologo", "/target:winexe", "/platform:x64", "/optimize+", "/out:"+str(out/"Designer.exe"),
+        "/r:System.Drawing.dll", "/r:System.Windows.Forms.dll", "/r:System.Web.Extensions.dll",
+        *("/r:"+str(f) for f in web_dlls), ROOT/"compiler/DesignerWindow.cs")
     support = out / "support.zip"
     with zipfile.ZipFile(support,"w",zipfile.ZIP_DEFLATED) as z:
         for f in sorted((ROOT/"python").glob("*.py")):
@@ -117,10 +121,10 @@ def main():
             for item in src.infolist():
                 if not item.is_dir():
                     z.writestr(item.filename, src.read(item))
-        for folder in ("repl", "packages"):
+        for folder in ("repl", "packages", "compiler"):
             for f in sorted((ROOT/"addin"/folder).iterdir()):
                 z.write(f, folder + "/" + f.name)
-        for f in (out/"bridge.dll", WEB/"build/native/x64/WebView2Loader.dll"):
+        for f in (out/"Designer.exe", *web_dlls, out/"bridge.dll", WEB/"build/native/x64/WebView2Loader.dll"):
             z.write(f,f.name)
         z.write(ROOT/"examples/functions.py","examples/functions.py")
         z.write(ROOT/"examples/LICENSE", "examples/LICENSE")
@@ -134,7 +138,6 @@ def main():
     manifest.write_text("\n".join(sha256(f.read_bytes()).hexdigest() for f in (runtime,support,ide)))
     refs = ["System.dll","System.Core.dll","System.Drawing.dll","System.Windows.Forms.dll",
             "System.Web.Extensions.dll","System.IO.Compression.dll","System.Net.Http.dll","Microsoft.CSharp.dll"]
-    csc = vs/"MSBuild/Current/Bin/Roslyn/csc.exe"
     release = os.environ.get("PYTHONEXCEL_RELEASE_TAG", "v0.2.0")
     if not re.fullmatch(r"v\d+\.\d+\.\d+", release):
         raise ValueError("Expected a release tag such as v0.2.1")

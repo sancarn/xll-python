@@ -37,8 +37,9 @@ namespace PythonExcel
             string template = ExcelDnaUtil.XllPath;
             _ = Task.Run(() => Guard(() => {
                 Runtime.Install();
-                var info = new System.Diagnostics.ProcessStartInfo(Path.Combine(Runtime.Home, "pythonw.exe"),
-                    "-I " + Published.Quote(Path.Combine(Runtime.Support, "_xll_designer.py")) + " " + Published.Quote(template))
+                var info = new System.Diagnostics.ProcessStartInfo(Path.Combine(Runtime.Support, "Designer.exe"),
+                    Published.Quote(Runtime.Python) + " " + Published.Quote(template) + " " +
+                    Published.Quote(Path.Combine(Runtime.Root, "CompilerWebView2")))
                     { UseShellExecute=false, WorkingDirectory=Runtime.Support };
                 System.Diagnostics.Process.Start(info).Dispose();
             }));

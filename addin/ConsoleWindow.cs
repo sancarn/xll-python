@@ -20,11 +20,20 @@ namespace PythonExcel
         readonly WebView2 web = new WebView2 { Dock = DockStyle.Fill };
         readonly SemaphoreSlim requests = new SemaphoreSlim(1);
         readonly ExcelObjects excel = new ExcelObjects();
+        static Task released = Task.CompletedTask;
         bool sessionOpen;
         volatile bool closed;
 
         internal static void Open() => host.Open();
         internal static void Shutdown() => host.Shutdown();
+        internal static async Task<bool> CloseForUpdate(CancellationToken token)
+        {
+            if (!Volatile.Read(ref released).IsCompleted)
+                throw new InvalidOperationException("Wait for the previous Python Console session to finish before restarting Excel.");
+            if (!await host.CloseForUpdate(token)) return false;
+            await Volatile.Read(ref released);
+            return true;
+        }
 
         ConsoleWindow()
         {
@@ -33,8 +42,17 @@ namespace PythonExcel
             MinimumSize = new Size(440, 320);
             Controls.Add(web);
             Shown += async (s, e) => await Initialize();
+            FormClosing += (s, e) => {
+                if (host.UpdateClosePending && requests.CurrentCount == 0)
+                {
+                    e.Cancel = true;
+                    host.CancelUpdateClose("Wait for the Python Console command to finish before restarting Excel.");
+                }
+            };
             FormClosed += (s, e) => {
                 closed = true;
+                // Completing Serve releases the console's table of Excel object handles.
+                Volatile.Write(ref released, released.IsCompleted ? excel.Completion : Task.WhenAll(released, excel.Completion));
                 if (sessionOpen)
                 {
                     try

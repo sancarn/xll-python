@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -19,6 +20,7 @@ namespace PythonExcel
 
         internal static void Open() => host.Open();
         internal static void Shutdown() => host.Shutdown();
+        internal static Task<bool> CloseForUpdate(System.Threading.CancellationToken token) => host.CloseForUpdate(token);
 
         PipWindow()
         {

@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 
 sys.coinit_flags = 2
 import psutil
@@ -17,10 +18,42 @@ import win32gui
 import win32process
 from pywinauto import Desktop
 from excel_smoke import ROOT, connect, wait_for
+from compiler_designer import choose_file
+from web_editor import page
 
 
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def open_tools(main, pid, script):
+    def invoke(label):
+        pythoncom.CoInitialize()
+        try:
+            main.child_window(title=label,control_type="Button").invoke()
+        finally:
+            pythoncom.CoUninitialize()
+
+    def window(title):
+        dialog = Desktop(backend="win32").window(process=pid, title_re=title)
+        dialog.wait("visible", timeout=45)
+        return dialog.handle
+
+    main.child_window(title="Python",control_type="TabItem").select()
+    threading.Thread(target=invoke, args=("Run Script",), daemon=True).start()
+    choose_file(pid, script)
+    handles = [window("Python output.*probe.py")]
+    threading.Thread(target=invoke, args=("Run Macro",), daemon=True).start()
+    picker = Desktop(backend="uia").window(handle=window("Run Macro"))
+    picker.child_window(title="Window test",control_type="ListItem").select()
+    picker.child_window(title="Run",control_type="Button").invoke()
+    handles.append(window("Python output.*Window test"))
+    for label, title in (("Console","Python Console"), ("Manage Packages","Manage Packages"), ("Open IDE","Python IDE.*")):
+        invoke(label)
+        handles.append(window(title))
+    invoke("Compile to XLL")
+    compiler = wait_for(lambda:next((p for p in psutil.Process(pid).children() if p.name()=="Designer.exe"),None))
+    return handles, compiler
 
 
 def test(source, action):
@@ -39,7 +72,16 @@ def test(source, action):
         csv = base/"startup.csv"
         csv.write_text("test\n")
         files = [base/"One workbook.xlsx",base/"Two \u03a9.xlsx"]
-        proc = subprocess.Popen([excel,"/x","/automation",csv],env=dict(os.environ,XLL_PYTHON_HOME=str(base/"profile")))
+        profile = base/"profile"
+        profile.mkdir()
+        scripts = base/"scripts"
+        scripts.mkdir()
+        script = scripts/"probe.py"
+        script.write_text("from xll_python import macro\n@macro(name='Window test')\ndef probe(): print(42)\n")
+        (profile/"settings.json").write_text(json.dumps(dict(folders=[str(scripts)],packages=[])))
+        proc = subprocess.Popen([excel,"/x","/automation",csv],env=dict(os.environ,XLL_PYTHON_HOME=str(profile),
+                                WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="--remote-debugging-port=0"))
+        compiler = None
         app = restored = None
         progress = Desktop(backend="win32").window(process=proc.pid, title="Checking for updates")
         def dialogs(pid):
@@ -80,6 +122,13 @@ def test(source, action):
             unsaved=app.Workbooks.Add()
             unsaved.Worksheets(1).Range("A1").Value2="unsaved text"
             main=Desktop(backend="uia").window(handle=app.Hwnd)
+            handles, compiler = open_tools(main, proc.pid, script)
+            with page(profile/"ConsoleWebView2","https://python-console.example/") as (js, send):
+                wait_for(lambda:js("!!document.querySelector('#source')"))
+                js("source.focus()")
+                send("Input.insertText", text="from xll_python import Application\nbook_ref = Application.ActiveWorkbook\nprint(book_ref.Name)")
+                js("run.click()")
+                wait_for(lambda:js("!run.disabled && transcript.innerText.includes(" + json.dumps(unsaved.Name) + ")"))
             def click():
                 main.child_window(title="Python",control_type="TabItem").select()
                 main.child_window(title="Check for Updates",control_type="Button").invoke()
@@ -87,6 +136,7 @@ def test(source, action):
             click()
             press("Cancel")
             wait_for(lambda:not list(base.glob("*.tmp")))
+            assert all(win32gui.IsWindow(h) for h in handles) and compiler.is_running()
             assert app.Workbooks.Count == 3 and not app.Workbooks(files[0].name).Saved
             assert unsaved.Worksheets(1).Range("A1").Value2=="unsaved text" and digest(target)==before
             print("PASS: declining restart left workbooks open, unsaved changes intact and XLL unchanged",flush=True)
@@ -96,9 +146,35 @@ def test(source, action):
                 win32gui.PostMessage(save_dialog(),win32con.WM_CLOSE,0,0)
                 wait_for(lambda:not list(base.glob("*.tmp")))
                 assert app.Workbooks.Count == 3
+                assert all(win32gui.IsWindow(h) for h in handles) and compiler.is_running()
                 assert unsaved.Worksheets(1).Range("A1").Value2=="unsaved text" and digest(target)==before
                 print("PASS: canceling Save As kept the untitled workbook and its edits open",flush=True)
                 app.Workbooks(files[0].name).Worksheets(1).Range("A1").Value2="last edit"
+            else:
+                with page(profile/"CompilerWebView2", "https://xll-designer.example/") as (js, send):
+                    for event in ("dragEnter", "dragOver", "drop"):
+                        send("Input.dispatchDragEvent", type=event, x=140, y=160,
+                             data=dict(items=[], files=[str(scripts)], dragOperationsMask=1))
+                    wait_for(lambda:js("!!project && !busy"))
+                    click()
+                    press(action)
+                    wait_for(lambda:js("$('leave').open"))
+                    js("$('cancelLeave').click()")
+                    wait_for(lambda:not list(base.glob("*.tmp")))
+                    assert all(win32gui.IsWindow(h) for h in handles) and compiler.is_running()
+                    assert unsaved.Worksheets(1).Range("A1").Value2=="unsaved text" and digest(target)==before
+                    print("PASS: canceling the project close preserved the tools and unsaved workbook",flush=True)
+                    click()
+                    press(action)
+                    wait_for(lambda:js("$('leave').open"))
+                    prompt = Desktop(backend="win32").window(process=proc.pid,title="Python for Excel update")
+                    stop = next(w for w in prompt.descendants() if w.window_text()=="Cancel update")
+                    win32gui.PostMessage(stop.handle,win32con.BM_CLICK,0,0)
+                    wait_for(lambda:not list(base.glob("*.tmp")))
+                    js("$('discard').click()")
+                    wait_for(lambda:js("!busy"))
+                    assert compiler.is_running() and app.Workbooks.Count == 3
+                    print("PASS: canceling the update withdrew the compiler close request",flush=True)
             del unsaved
             click()
             app=None
@@ -109,8 +185,16 @@ def test(source, action):
                 dialog = Desktop(backend="win32").window(handle=save_dialog())
                 dialog.child_window(class_name="Edit", found_index=0).set_edit_text(str(new_file))
                 win32gui.PostMessage(dialog.handle,win32con.WM_COMMAND,win32con.IDOK,0)
-            proc.wait(100)
+            else:
+                with page(profile/"CompilerWebView2", "https://xll-designer.example/") as (js, _):
+                    wait_for(lambda:js("$('leave').open"))
+                    designer = Desktop(backend="win32").window(process=compiler.pid,title="Compile to XLL")
+                    win32gui.SendMessage(designer.handle,win32con.WM_CLOSE,0,0)
+                    js("$('discard').click()")
+            exit_code = proc.wait(100)
             new_pid=wait_for(replacement_pid,35)
+            assert exit_code == 0, f"Excel exited with {exit_code:#x}"
+            assert not compiler.is_running() and not any(win32gui.IsWindow(h) for h in handles)
             def reconnect():
                 for h in Desktop(backend="win32").windows(process=new_pid,visible_only=True):
                     if h.window_text()=="Microsoft Excel Security Notice":
@@ -129,6 +213,9 @@ def test(source, action):
             assert digest(target)==sha
             print(f"PASS: {action} restarted Excel with the expected workbooks and contents",flush=True)
         finally:
+            if compiler and compiler.is_running():
+                compiler.kill()
+                compiler.wait()
             if restored is not None:
                 restored.DisplayAlerts=False
                 restored.Quit()

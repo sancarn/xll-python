@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -19,6 +20,9 @@ namespace PythonExcel
         readonly string name;
         Form window;
         bool running, closing, reopen;
+        TaskCompletionSource<bool> updateClose;
+        CancellationToken updateToken;
+        int withdrawals;
 
         internal WebWindowHost(string name, Func<Form> create)
         {
@@ -75,6 +79,7 @@ namespace PythonExcel
                         if (closing) return;
                         _ = form.Handle;
                         window = form;
+                        if (updateClose != null) PostUpdateClose(form);
                     }
                     form.FormClosing += (s, e) => { if (!e.Cancel) lock (lifetime) closing = true; };
                     form.FormClosed += (s, e) => { lock (lifetime) window = null; };
@@ -88,12 +93,55 @@ namespace PythonExcel
                 {
                     window = null;
                     running = false;
+                    FinishUpdateClose(true);
                     if (reopen) StartWindow();
                 }
             }
         }
 
         internal bool IsClosing { get { lock (lifetime) return closing; } }
+
+        internal bool UpdateClosePending { get { lock (lifetime) return updateClose != null; } }
+        internal bool UpdateCloseCanceled { get { lock (lifetime) return updateClose != null && updateToken.IsCancellationRequested; } }
+        // A native confirmation can outlive a withdrawn request. Count both the retired
+        // requests and a cancellation currently visible on the in-flight request.
+        internal int Withdrawals { get { lock (lifetime) return withdrawals + (UpdateCloseCanceled ? 1 : 0); } }
+
+        void PostUpdateClose(Form form)
+        {
+            form.BeginInvoke(new Action(() => {
+                if (UpdateCloseCanceled) CancelUpdateClose();
+                else form.Close();
+            }));
+        }
+
+        internal Task<bool> CloseForUpdate(CancellationToken token)
+        {
+            lock (lifetime)
+            {
+                if (!running) return Task.FromResult(true);
+                reopen = false;
+                if (updateClose != null) throw new InvalidOperationException("Finish the open " + name + " close prompt before retrying.");
+                updateClose = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                updateToken = token;
+                if (window != null && !closing) PostUpdateClose(window);
+                return updateClose.Task;
+            }
+        }
+
+        internal void CancelUpdateClose(string reason = null)
+        {
+            lock (lifetime) FinishUpdateClose(false, reason);
+        }
+
+        void FinishUpdateClose(bool closed, string reason = null)
+        {
+            if (updateClose == null) return;
+            if (updateToken.IsCancellationRequested) withdrawals++;
+            if (reason == null) updateClose.TrySetResult(closed);
+            else updateClose.TrySetException(new InvalidOperationException(reason));
+            updateClose = null;
+        }
 
         internal void Shutdown()
         {

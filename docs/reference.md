@@ -22,6 +22,8 @@ The workbench XLL contains CPython 3.13.12 for Windows x64, its standard library
 - **Don't save any** closes every workbook in this instance and discards unsaved changes. After the restart, Excel reopens the last saved versions. Workbooks that were never saved are discarded.
 - **Cancel** stops the update and leaves all workbooks open with their edits intact.
 
+After you confirm the restart and finish any workbook Save As prompts, the updater closes this instance’s script and macro output, console, package manager, IDE and compiler windows. The IDE and compiler prompt for unsaved edits. Canceling a tool’s close stops the update before Excel discards or closes workbooks. Any saves or window closures already completed are kept. If a console command is still running, let it finish and check for updates again.
+
 After Excel exits, a separate helper replaces the XLL at its existing path and reopens the saved workbooks. The add-in folder must be writable. If another Excel instance locks the XLL, the helper reopens the workbooks with the existing version.
 
 ### Manage packages

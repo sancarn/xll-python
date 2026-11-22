@@ -18,7 +18,15 @@ function host(action, data = {}, drop) {
   });
 }
 bridge.addEventListener("message", ({data}) => {
-  if (data.event === "close") return run(() => leave(() => host("close")));
+  if (data.event === "close") {
+    const cancel = () => bridge.postMessage({action: "cancelClose"});
+    if (busy) return cancel();
+    return run(async () => {
+      let closing = false;
+      try { await leave(() => { closing = true; return host("close"); }); }
+      finally { if (!closing) cancel(); }
+    });
+  }
   if (reply && data.id === reply.id) {
     const current = reply;
     reply = null;

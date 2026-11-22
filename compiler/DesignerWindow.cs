@@ -5,6 +5,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
@@ -19,20 +20,38 @@ internal sealed class DesignerWindow : Form
     readonly JavaScriptSerializer json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
     readonly string python, template;
     string root, manifest;
-    bool ready, busy, closing;
+    bool ready, busy, closing, promptOpen, updateClose;
+    readonly EventWaitHandle withdrawn;
 
     [STAThread]
     static void Main(string[] args)
     {
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
-        Application.Run(new DesignerWindow(args[0], args[1], args[2]));
+        using (var withdrawn = args.Length == 4 ? EventWaitHandle.OpenExisting(args[3]) : null)
+        using (var window = new DesignerWindow(args[0], args[1], args[2], withdrawn))
+        {
+            if (withdrawn != null)
+                window.Shown += (s,e) => window.ListenForUpdate();
+            Application.Run(window);
+        }
     }
 
-    DesignerWindow(string python, string template, string profile)
+    async void ListenForUpdate()
+    {
+        // Read away from the UI thread, but close through the normal project save prompt.
+        while (await Task.Run(Console.ReadLine) == "CLOSE" && !IsDisposed)
+        {
+            if (busy || promptOpen || !Enabled || withdrawn.WaitOne(0)) Console.WriteLine("CANCELED");
+            else { updateClose = true; Close(); }
+        }
+    }
+
+    DesignerWindow(string python, string template, string profile, EventWaitHandle withdrawn)
     {
         this.python = python;
         this.template = template;
+        this.withdrawn = withdrawn;
         Text = "Compile to XLL";
         ClientSize = new Size(1000, 720);
         MinimumSize = new Size(660, 480);
@@ -65,10 +84,25 @@ internal sealed class DesignerWindow : Form
             catch (Exception error) { if (!IsDisposed) Fail(error.Message); }
         };
         FormClosing += (s,e) => {
-            if (closing || !ready) return;
+            if (closing || !ready)
+            {
+                // Observe Excel's cancellation at the final close, independently of WebView message order.
+                if (updateClose && withdrawn.WaitOne(0)) { e.Cancel = true; CancelClose(); }
+                return;
+            }
             e.Cancel = true;
-            if (!busy) web.CoreWebView2.PostWebMessageAsJson("{\"event\":\"close\"}");
+            if (!busy && !promptOpen)
+            {
+                promptOpen = true;
+                web.CoreWebView2.PostWebMessageAsJson("{\"event\":\"close\"}");
+            }
         };
+    }
+
+    void CancelClose()
+    {
+        if (updateClose) Console.WriteLine("CANCELED");
+        promptOpen = updateClose = closing = false;
     }
 
     void Fail(string message)
@@ -95,14 +129,15 @@ internal sealed class DesignerWindow : Form
     {
         if (args.Source != Page || web.CoreWebView2.Source != Page) return;
         var req = json.Deserialize<Dictionary<string,object>>(args.WebMessageAsJson);
+        string action = (string)req["action"];
+        if (action == "cancelClose") { CancelClose(); return; }
         var id = req["id"];
         if (busy) return;
         busy = true;
         try
         {
-            string action = (string)req["action"];
             if (action == "ready") ready = true;
-            else if (action == "close") { closing = true; Close(); return; }
+            else if (action == "close") { closing = true; Close(); if (closing) return; }
             else { Reply(new { id, result = await Dispatch(action, req, args) }); return; }
             Reply(new { id, result = (object)null });
         }

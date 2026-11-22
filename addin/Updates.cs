@@ -135,6 +135,7 @@ namespace PythonExcel
                 dynamic app = ExcelDnaUtil.Application;
                 plan.Files = PrepareWorkbooks(app, plan.Target, choice == DialogResult.Yes);
                 plan.Arguments(); // Validate the relaunch before closing anything.
+                if (!CloseToolWindows()) return;
                 using (var current = Process.GetCurrentProcess()) plan.ParentPid = current.Id;
                 helper = Process.Start(new ProcessStartInfo(HelperPath()) {
                     UseShellExecute=false, CreateNoWindow=true, RedirectStandardInput=true, RedirectStandardOutput=true,
@@ -150,16 +151,10 @@ namespace PythonExcel
                 var child = helper;
                 child.Exited += (s,e) => Interlocked.Exchange(ref busy, 0);
                 child.EnableRaisingEvents = true;
-                if (choice == DialogResult.No)
-                {
-                    foreach (dynamic book in OpenWorkbooks(app))
-                    {
-                        int count = app.Workbooks.Count;
-                        book.Close(SaveChanges: false);
-                        if (app.Workbooks.Count >= count)
-                            throw new IOException("A workbook stayed open. The update was canceled.");
-                    }
-                }
+                if (choice == DialogResult.No) CloseWithoutSaving(app);
+                // Drain unreachable COM wrappers while Excel can still service their Release calls.
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
                 handedOff = true;
                 try { app.Quit(); }
                 catch (COMException e) when ((uint)e.ErrorCode == 0x80010108) { return; }
@@ -208,7 +203,7 @@ namespace PythonExcel
                 var layout = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill,
                     FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(12) };
                 layout.Controls.Add(new Label { AutoSize = true, Text = "Excel will restart to install " + version +
-                    ".\nSave changes to your open workbooks before restarting?", Margin = new Padding(3, 3, 3, 12) });
+                    " and close its Python tools.\nSave changes to your open workbooks before restarting?", Margin = new Padding(3, 3, 3, 12) });
                 var buttons = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
                 buttons.Controls.Add(new Button { Text = "Save all", AutoSize = true, DialogResult = DialogResult.Yes });
                 buttons.Controls.Add(new Button { Text = "Don't save any", AutoSize = true, DialogResult = DialogResult.No });
@@ -222,11 +217,62 @@ namespace PythonExcel
             }
         }
 
+        static bool CloseToolWindows()
+        {
+            using (var stop = new CancellationTokenSource())
+            using (var dialog = new Form {
+                Text = Caption, FormBorderStyle = FormBorderStyle.FixedDialog,
+                StartPosition = FormStartPosition.CenterParent, MinimizeBox = false, MaximizeBox = false,
+                ShowInTaskbar = false, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink
+            })
+            {
+                var layout = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill,
+                    FlowDirection = FlowDirection.TopDown, Padding = new Padding(12) };
+                layout.Controls.Add(new Label { AutoSize = true,
+                    Text = "Closing Python tools. Check open tool windows for any save prompts." });
+                var cancel = new Button { Text = "Cancel update", AutoSize = true, DialogResult = DialogResult.Cancel };
+                layout.Controls.Add(cancel);
+                dialog.Controls.Add(layout);
+                dialog.CancelButton = cancel;
+                dialog.FormClosing += (s,e) => { if (dialog.DialogResult != DialogResult.OK) stop.Cancel(); };
+                Exception error = null;
+                dialog.Shown += async (s,e) => {
+                    try
+                    {
+                        // Ask the editors first. Either editor can veto closing to preserve a draft.
+                        var tools = CompilerWindow.Snapshot().Select(c => (Func<CancellationToken, Task<bool>>)c.CloseForUpdate)
+                            .Concat(new Func<CancellationToken, Task<bool>>[] { IdeWindow.CloseForUpdate,
+                                ConsoleWindow.CloseForUpdate, PipWindow.CloseForUpdate });
+                        foreach (var close in tools)
+                            if (!await close(stop.Token) || !dialog.Visible) return;
+                        foreach (var output in Application.OpenForms.OfType<OutputWindow>().ToArray()) output.Close();
+                        dialog.DialogResult = DialogResult.OK;
+                    }
+                    catch (Exception ex) { error = ex; }
+                    finally { if (dialog.Visible && dialog.DialogResult == DialogResult.None) dialog.DialogResult = DialogResult.Cancel; }
+                };
+                var result = dialog.ShowDialog(new Owner());
+                if (error != null) throw error;
+                return result == DialogResult.OK;
+            }
+        }
+
         static List<object> OpenWorkbooks(dynamic app)
         {
             var books = new List<object>();
             foreach (object book in app.Workbooks) books.Add(book);
             return books;
+        }
+
+        static void CloseWithoutSaving(dynamic app)
+        {
+            foreach (dynamic book in OpenWorkbooks(app))
+            {
+                int count = app.Workbooks.Count;
+                book.Close(SaveChanges: false);
+                if (app.Workbooks.Count >= count)
+                    throw new IOException("A workbook stayed open. The update was canceled.");
+            }
         }
 
         static string[] PrepareWorkbooks(dynamic app, string target, bool save)

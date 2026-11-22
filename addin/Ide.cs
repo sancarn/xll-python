@@ -33,6 +33,7 @@ namespace PythonExcel
 
         internal static void Open() => host.Open();
         internal static void Shutdown() => host.Shutdown();
+        internal static Task<bool> CloseForUpdate(CancellationToken token) => host.CloseForUpdate(token);
 
         IdeWindow()
         {
@@ -51,11 +52,25 @@ namespace PythonExcel
                 }
             };
             FormClosing += (s, e) => {
+                if (allowClose && host.UpdateCloseCanceled)
+                {
+                    allowClose = false;
+                    e.Cancel = true;
+                    host.CancelUpdateClose();
+                    return;
+                }
                 if (host.IsClosing || !ready || allowClose || e.CloseReason != CloseReason.UserClosing) return;
-                if (closing && closeWait.Elapsed >= TimeSpan.FromSeconds(5) &&
+                // During an update the outstanding save prompt owns the decision. Cancel update
+                // first to use the normal force-close fallback if the renderer is unresponsive.
+                int withdrawals = host.Withdrawals;
+                if (closing && (!host.UpdateClosePending || host.UpdateCloseCanceled) &&
+                    closeWait.Elapsed >= TimeSpan.FromSeconds(5) &&
                     MessageBox.Show(this, "Close the IDE now and discard any unsaved edits?", "Close Excel Python IDE",
                         MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) == DialogResult.Yes)
+                {
+                    e.Cancel = withdrawals != host.Withdrawals;
                     return;
+                }
                 e.Cancel = true;
                 if (closing) return;
                 closeWait.Restart();
@@ -223,6 +238,7 @@ namespace PythonExcel
                 if (operation == "ready") { ready = true; return; }
                 if (operation == "closeResult") {
                     if (closing && Equals(req["allow"], true)) { allowClose = true; BeginInvoke(new Action(Close)); }
+                    else host.CancelUpdateClose();
                     closing = false;
                     return;
                 }

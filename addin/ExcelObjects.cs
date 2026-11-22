@@ -23,6 +23,7 @@ namespace PythonExcel
         readonly Dictionary<int, object> objects = new Dictionary<int, object>();
         int next;
         volatile bool closed;
+        internal Task Completion { get; }
 
         internal ExcelObjects()
         {
@@ -31,7 +32,7 @@ namespace PythonExcel
                 PipeAccessRights.FullControl, AccessControlType.Allow));
             pipe = new NamedPipeServerStream(Name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
                 PipeOptions.Asynchronous, 0, 0, security);
-            _ = Serve();
+            Completion = Serve();
         }
 
         internal static string RunScript(string path)
